@@ -11,8 +11,9 @@ services:
     volumes:
       - ../certs:/etc/ssl/lab:ro
     ports:
-      - "127.0.0.1:2525:25"   # SMTP STARTTLS
+      - "127.0.0.1:2525:25"   # SMTP STARTTLS (MX/server-to-server role)
       - "127.0.0.1:4465:465"  # SMTP implicit TLS
+      - "127.0.0.1:2587:587"  # SMTP submission STARTTLS (client-facing role)
       - "127.0.0.1:2143:143"  # IMAP STARTTLS
       - "127.0.0.1:2993:993"  # IMAP implicit TLS
       - "127.0.0.1:2110:110"  # POP3 STLS

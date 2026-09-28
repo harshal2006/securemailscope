@@ -1,11 +1,17 @@
-# Lab-only Postfix master.cf. Adds implicit-TLS smtps (465) alongside the
-# standard STARTTLS smtp (25) service.
+# Lab-only Postfix master.cf. Adds implicit-TLS smtps (465) and the
+# submission service (587) alongside the standard STARTTLS smtp (25)
+# service. All three share smtpd_sasl_auth_enable=yes from main.cf, so
+# AUTH is accepted on submission/25 in plaintext unless the client
+# upgrades first - this is intentional, to let the lab demonstrate
+# plaintext-auth-before-TLS (see rules T-01/T-02).
 #
 # service type  private unpriv  chroot  wakeup  maxproc command + args
 smtp      inet  n       -       n       -       -       smtpd
 smtps     inet  n       -       n       -       -       smtpd
   -o smtpd_tls_wrappermode=yes
   -o smtpd_tls_security_level=encrypt
+submission inet n       -       n       -       -       smtpd
+  -o smtpd_tls_security_level=may
 
 pickup    unix  n       -       n       60      1       pickup
 cleanup   unix  n       -       n       -       0       cleanup
