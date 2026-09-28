@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Lab secrets - private keys, never commit
+lab/certs/*.key
+lab/certs/*key*.pem
+
+# Captured traffic (may contain sensitive data even in lab)
+data/pcaps/*.pcap
+data/pcaps/*.pcapng
+
+# OS
+.DS_Store
