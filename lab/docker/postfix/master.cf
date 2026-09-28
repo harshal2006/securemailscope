@@ -5,6 +5,11 @@
 # upgrades first - this is intentional, to let the lab demonstrate
 # plaintext-auth-before-TLS (see rules T-01/T-02).
 #
+# 2588 is a second submission-role listener with STARTTLS disabled
+# entirely (smtpd_tls_security_level=none), so it never advertises
+# STARTTLS in EHLO - for testing rule T-03 ("STARTTLS not offered")
+# against real traffic instead of a synthetic Session.
+#
 # service type  private unpriv  chroot  wakeup  maxproc command + args
 smtp      inet  n       -       n       -       -       smtpd
 smtps     inet  n       -       n       -       -       smtpd
@@ -12,6 +17,8 @@ smtps     inet  n       -       n       -       -       smtpd
   -o smtpd_tls_security_level=encrypt
 submission inet n       -       n       -       -       smtpd
   -o smtpd_tls_security_level=may
+2588      inet  n       -       n       -       -       smtpd
+  -o smtpd_tls_security_level=none
 
 pickup    unix  n       -       n       60      1       pickup
 cleanup   unix  n       -       n       -       0       cleanup

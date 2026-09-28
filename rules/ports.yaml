@@ -15,7 +15,7 @@
 smtp:
   starttls_ports:
     mx: [25, 2525]
-    submission: [587, 2587]
+    submission: [587, 2587, 2588]  # 2588: lab's STARTTLS-disabled variant, see lab/docker
   implicit_ports:
     submission: [465, 4465]
 

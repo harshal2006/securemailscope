@@ -80,3 +80,16 @@ def test_s01b_timeline_stops_at_tls_start(s01b_starttls_auth):
     kinds = [ev.kind for ev in s01b_starttls_auth.timeline]
     assert kinds[-1] == "tls_start"
     assert "auth_command" not in kinds  # AUTH happens inside TLS, never observed
+
+
+# --- S26: STARTTLS not offered at all (second lab service, port 2588) ---
+
+
+def test_s26_capability_confirmed_absent():
+    timeline = _timeline_for("S26_smtp_2588_starttls_disabled.pcap", 2588)
+    # False (confirmed absent from a fully-observed capability listing),
+    # not None (unobserved) - the EHLO reply was seen in full and never
+    # mentioned STARTTLS.
+    assert timeline.capability_advertised_starttls is False
+    assert timeline.starttls_issued is False
+    assert timeline.tls_followed is False

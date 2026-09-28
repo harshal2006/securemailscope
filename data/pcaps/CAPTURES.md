@@ -210,3 +210,31 @@ nothing for this capture - confirmed no SNI extension was sent at all.
 **Then ran the analyzer**: fired `[INFO] CERT_HOSTNAME_NOT_EVALUABLE`
 (not `CERT_HOSTNAME_MISMATCH` - hostname match is never guessed when
 there's no SNI to check it against), session score 95/100.
+
+## S26 — `S26_smtp_2588_starttls_disabled.pcap`
+
+First real (non-synthetic) capture for T-03 ("STARTTLS not offered at
+all"). Required a second lab Postfix service, not just a cert swap: added
+a `2588` listener in `lab/docker/postfix/master.cf` with
+`smtpd_tls_security_level=none`, published as `127.0.0.1:2588`.
+
+```
+swaks --to labuser@lab.test --from labuser@lab.test --server 127.0.0.1:2588
+```
+
+(no `-au`/`-ap` - this capture doesn't attempt AUTH, so there's nothing
+credential-related to redact-check.)
+
+**Verified independently of the analyzer, before running it:**
+- A raw `EHLO`/`STARTTLS` probe via `nc` confirms the EHLO capability
+  reply has no `STARTTLS` line, and issuing `STARTTLS` anyway gets `502
+  5.5.1 Error: command not implemented`.
+- `tshark` confirms `STARTTLS` never appears anywhere in the capture
+  (`tcp.payload` grep) and no TLS handshake occurs at all
+  (`tls.handshake.type` is empty for every frame).
+
+**Then ran the analyzer**: reported `capability_advertised_starttls=
+False` (confirmed absent from a fully-observed EHLO reply, not just
+unobserved) and fired `[HIGH] T-03`, session score 5/100 (also hit by
+the pre-existing `NO_TLS_OBSERVED` CRITICAL finding, since this session
+never uses TLS at all).

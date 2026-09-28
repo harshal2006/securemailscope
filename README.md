@@ -57,6 +57,7 @@ Published ports (host -> container):
 |---|---|---|---|
 | 2525 | SMTP | STARTTLS | mx (server-to-server) |
 | 2587 | SMTP | STARTTLS | submission (client-facing) |
+| 2588 | SMTP | STARTTLS disabled entirely (`smtpd_tls_security_level=none`) | submission - for `T-03` testing |
 | 4465 | SMTP | implicit TLS | submission |
 | 2143 | IMAP | STARTTLS | submission |
 | 2993 | IMAP | implicit TLS | submission |
@@ -149,7 +150,7 @@ test coverage in `tests/`, not theoretical code-path sharing - e.g.
 | `CERT_NOT_OBSERVABLE` | | Cert not observable (TLS 1.3, etc.) | INFO | y | y |
 | `T-01` | T-01 | Plaintext AUTH before TLS | CRITICAL | y | y |
 | `T-02` | T-02 | STARTTLS advertised but unused | HIGH (submission) / INFO (mx) | y | y |
-| `T-03` | T-03 | STARTTLS not offered at all | HIGH (submission) / LOW (mx) | n | y |
+| `T-03` | T-03 | STARTTLS not offered at all | HIGH (submission) / LOW (mx) | y | y |
 
 ## Verified vs not yet verified
 
@@ -208,6 +209,15 @@ is theoretically capable of.
   bit` respectively, before the analyzer correctly fired
   `CERT_WEAK_SIGNATURE_HASH` and `CERT_WEAK_KEY`.
 
+- `T-03` ("STARTTLS not offered"): added a second lab Postfix service on
+  port 2588 with `smtpd_tls_security_level=none`. Independently
+  confirmed with a raw `EHLO` probe (no `STARTTLS` line in the reply,
+  and issuing `STARTTLS` anyway gets `502 5.5.1 Error: command not
+  implemented`) and `tshark` (no TLS handshake anywhere in the capture)
+  before running the analyzer, which correctly reported
+  `capability_advertised_starttls=False` (confirmed absent, not
+  unobserved) and fired `T-03` HIGH.
+
 **Not yet verified against real captures** (implemented, but only
 exercised with synthetic `Session`/`TLSInfo`/`CertInfo`/`StarttlsAnalysis`
 objects in unit tests, not real pcaps):
@@ -217,9 +227,6 @@ objects in unit tests, not real pcaps):
 - `SSL 3.0` and `TLS 1.1` findings - no test at all, real or synthetic,
   exercises these two specifically (only TLS 1.0/1.2/1.3 have dedicated
   tests), even though the matching code path is shared.
-- `T-03` ("STARTTLS not offered") - the lab server always advertises
-  STARTTLS; producing a real negative would need a second lab
-  configuration with STARTTLS disabled.
 - IMAP/POP3 STARTTLS timeline parsing (capability detection, STLS) -
   implemented with the same logic as SMTP, but no real IMAP/POP3
   plaintext-auth pcap has been captured, only SMTP.

@@ -361,6 +361,23 @@ def test_real_wrong_sni_pcap_triggers_hostname_mismatch(rules):
     assert mismatch.plan_id == "X-05"
 
 
+def test_real_starttls_disabled_pcap_triggers_t03(rules):
+    # First real (non-synthetic) T-03 capture: a second lab service on
+    # port 2588 with smtpd_tls_security_level=none, so STARTTLS never
+    # appears in the EHLO capability listing at all. Independently
+    # confirmed with a raw EHLO probe and tshark before running the
+    # analyzer - see data/pcaps/CAPTURES.md.
+    session, analysis = _real_session_and_analysis(
+        "S26_smtp_2588_starttls_disabled.pcap"
+    )
+    assert session.role == "submission"
+    assert analysis.capability_advertised_starttls is False
+    findings = evaluate_session(session, rules, analysis)
+    t03 = next(f for f in findings if f.rule_id == "T-03")
+    assert t03.severity == "HIGH"
+    assert t03.plan_id == "T-03"
+
+
 def test_real_no_sni_pcap_reports_not_evaluable_not_mismatch(rules):
     session, analysis = _real_session_and_analysis("S25_smtp_587_no_sni.pcap")
     findings = evaluate_session(session, rules, analysis)
