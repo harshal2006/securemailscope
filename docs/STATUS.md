@@ -19,18 +19,18 @@ a pcap.
 | Plan ID | Rule ID | Impl | Real | Synthetic | Note |
 |---|---|---|---|---|---|
 | P-01 | — | no | no | no | No confirmed mapping to this codebase; meaning never established with the user. |
-| P-02 | `TLS_VERSION_SSL3` | yes | no | no | SSLv3 predates the local OpenSSL's supported protocol list entirely; no real capture attempted. |
-| P-02 | `TLS_VERSION_1_0` | yes | **yes** | yes | Real: `-cipher DEFAULT@SECLEVEL=0` was needed to unlock a genuine TLS 1.0 handshake locally. |
-| P-02 | `TLS_VERSION_1_1` | yes | no | no | Shares matching code with TLS 1.0 (which *is* real-tested) but has no test of its own. |
+| P-02 | `TLS_VERSION_SSL3` | yes | **yes** | no | Real: purpose-built legacy TLS endpoint (Debian Jessie/OpenSSL 1.0.1t, both ends), forced with `-ssl3`. |
+| P-02 | `TLS_VERSION_1_0` | yes | **yes** | yes | Real: `-cipher DEFAULT@SECLEVEL=0` was needed to unlock a genuine TLS 1.0 handshake against the modern mail-server lab. |
+| P-02 | `TLS_VERSION_1_1` | yes | **yes** | no | Real: same legacy endpoint as SSLv3, forced with `-tls1_1`. |
 | P-03 | `TLS_VERSION_1_2` | yes | **yes** | yes | |
 | P-04 | — | no | no | no | No confirmed mapping. |
 | P-05 | — | no | no | no | No confirmed mapping. |
 | P-06 | — | no | no | no | No confirmed mapping. |
 | C-01 | — | no | no | no | No confirmed mapping. |
-| C-02 | `WEAK_CIPHER_SUITE` | yes | no | yes | Requires a server that still supports RC4/3DES/NULL/anon-DH; confirmed our lab server (Debian bookworm, OpenSSL 3.0) does not, even when the *client* offers them (tried 3 client environments, see below). |
+| C-02 | `WEAK_CIPHER_SUITE` | yes | **yes** | yes | Real: RC4-SHA and DES-CBC3-SHA against the legacy endpoint. Earlier attempt against the modern mail-server lab genuinely failed (server-side, not client-side, limitation) - closed by controlling both ends instead. NULL and anonymous-DH suites remain synthetic-only. |
 | C-03 | — | **no** | no | no | Not implemented. tshark exposes `tls.handshake.p_len` (DH prime length) but we don't parse ServerKeyExchange at all today. Checked feasibility, flagged to the user, told to skip rather than build. |
 | C-04 | — | no | no | no | No confirmed mapping. |
-| C-05 | `NO_FORWARD_SECRECY` | yes | no* | yes | *The finding's absence (ephemeral kex) is real-verified on every fixture; the finding *firing* (static kex) has no real capture, per instructions ("if none of our captures used static RSA/DH kex, say so — don't build a new capture"). |
+| C-05 | `NO_FORWARD_SECRECY` | yes | **yes** | yes | Real: RC4-SHA (`TLS_RSA_WITH_RC4_128_SHA`) is static RSA key exchange, so the legacy RC4 capture gives this finding real coverage as a side effect. Static-DH (as opposed to static-RSA) key exchange remains synthetic-only - no real capture negotiated a DH (non-EC) static suite. |
 | — | `FORWARD_SECRECY_NOT_EVALUABLE` | yes | no | yes | INFO; fires when a cipher suite isn't in our (non-exhaustive) kex classification table. Never guessed. |
 | C-06 | — | no | no | no | No confirmed mapping. |
 | C-07 | — | no | no | no | No confirmed mapping. |
@@ -45,7 +45,7 @@ a pcap.
 | X-09 | — | no | no | no | No confirmed mapping. |
 | — | `CERT_NOT_OBSERVABLE` | yes | **yes** | yes | TLS 1.3 encrypts the Certificate message; never guessed. |
 | — | `NO_TLS_OBSERVED` | yes | **yes** | yes | |
-| T-01 | `T-01` | yes | **yes** | yes | Real: SMTP (587 and 25), IMAP, POP3. Finding IMAP/POP3 real coverage found and fixed two bugs (tagged commands were invisible to detection) — see below. |
+| T-01 | `T-01` | yes | **yes** | yes | Real: SMTP (587 and 25), IMAP, POP3. IMAP real coverage found and fixed two bugs (tagged commands were invisible to detection) — see below. |
 | T-02 | `T-02` | yes | **yes** | yes | Real on both submission (HIGH) and mx (INFO) roles, and on SMTP/IMAP/POP3. |
 | T-03 | `T-03` | yes | **yes** | yes | Required a second lab Postfix service with STARTTLS disabled entirely. |
 | T-04 | — | no | no | no | No confirmed mapping. |
@@ -54,7 +54,35 @@ a pcap.
 | T-07 | — | no | no | no | No confirmed mapping. |
 | T-08 | — | no | no | no | No confirmed mapping. |
 
-## Notable bugs found and fixed via real captures (not code review)
+**Change this session:** `TLS_VERSION_SSL3`, `TLS_VERSION_1_1`,
+`WEAK_CIPHER_SUITE`, and `NO_FORWARD_SECRECY` moved from
+synthetic-only to real-verified — see Part A below.
+
+## Report renderer (new this session, Part B)
+
+`core/report.py` renders the analyzer's output into a structured report
+(`core/report_models.py` dataclasses): executive summary (score, grade,
+findings-by-severity, observable-cert ratio), endpoint inventory,
+findings with evidence (the STARTTLS timeline), certificate inventory,
+recommendations (fix + verification command, only for rules we actually
+implemented and that fired), and an appendix (limitations, full rule
+catalogue). Exports as JSON (schema-validated via `jsonschema`) or HTML
+(Jinja2, `templates/report.html.j2`).
+
+Verified by rendering S17, S18, S19, and all four legacy captures
+(S32-S35) to HTML, opening in headless Chrome, and reviewing
+screenshots — not just checking the JSON. This caught a real rendering
+bug: `select_autoescape(["html"])` checks the template *filename's own*
+extension, and `report.html.j2` ends in `.j2`, so autoescaping was
+silently off — `<host>:<port>` placeholders in recommendation commands
+were being swallowed as bogus HTML tags by the browser. Fixed by
+forcing `autoescape=True` unconditionally; confirmed with a second
+screenshot and a regression test (`test_html_placeholders_are_escaped_not_swallowed`).
+
+Not done: PDF export, an API, a dashboard, or ML — explicitly out of
+scope for this round.
+
+## Notable bugs found and fixed via real verification, not code review
 
 - **Cert expiry used wall-clock time, not capture time.** A pcap
   analyzed long after capture would have judged a cert's expiry against
@@ -80,22 +108,30 @@ a pcap.
   application-data packets.** Fixed by treating everything after the
   handshake starts as opaque, rather than re-checking TLS fields per
   packet.
+- **HTML autoescaping was silently disabled** (this session, Part B) —
+  see "Report renderer" above.
 
-## Explicitly attempted, found infeasible (not faked)
+## Previously infeasible, now closed (Part A, this session)
 
-Weak cipher suites (RC4/3DES/NULL/anonymous-DH), tried three ways:
-local OpenSSL 3.0.18 (not compiled in at all), Python's `ssl` module
-(same result), and a Debian Jessie (2016, OpenSSL 1.0.1t) container as
-the TLS *client* on the lab's own docker network — this one genuinely
-offers RC4/3DES, but the handshake still fails because the lab
-**server** (Debian bookworm, OpenSSL 3.0) doesn't support these ciphers
-server-side either. A real capture would need an entirely separate
-legacy mail server image, judged out of scope.
+Weak cipher suites (RC4/3DES) and SSLv3/TLS 1.1 were previously
+attempted against the *mail-server* lab (Debian bookworm, OpenSSL 3.0)
+and genuinely failed there — the server itself didn't support these
+configs, and negotiation needs both sides to agree. Closed by building
+a dedicated legacy TLS test endpoint instead: two Debian Jessie
+(OpenSSL 1.0.1t) containers on a private docker network, one running
+`openssl s_server` (no full mail server needed — these rules are purely
+TLS-layer), one as the client. All four configs (RC4, 3DES, SSLv3,
+TLS 1.1) worked once both ends were controlled; none were infeasible.
+See `data/pcaps/CAPTURES.md` (S32-S35) for exact commands and wire-level
+verification.
+
+NULL-cipher and anonymous-DH suites, and static-DH (non-RSA) key
+exchange, were not attempted this round and remain synthetic-only.
 
 ## Not built (by design, per explicit instruction)
 
-Report rendering (HTML/PDF), a web UI or dashboard, an API, ML-based
-scoring or anomaly detection.
+PDF export, a web UI or dashboard, an API, ML-based scoring or anomaly
+detection.
 
 ## Reproducing
 
@@ -108,7 +144,7 @@ From `securemailscope/`, with the venv active
 pytest -q
 ```
 
-Expect **112 passed**.
+Expect **136 passed**.
 
 ### Analyzer against key captures
 
@@ -138,12 +174,29 @@ python -m core.analyze tests/fixtures/pcaps/S29_imap_2143_starttls_login.pcap
 # S30/S31: POP3 plaintext USER/PASS vs STLS-then-auth
 python -m core.analyze tests/fixtures/pcaps/S30_pop3_2110_plaintext_userpass.pcap
 python -m core.analyze tests/fixtures/pcaps/S31_pop3_2110_stls_userpass.pcap
+
+# S32-S35: legacy TLS/cipher captures (RC4, 3DES, SSLv3, TLS 1.1)
+python -m core.analyze tests/fixtures/pcaps/S32_legacy_rc4.pcap
+python -m core.analyze tests/fixtures/pcaps/S33_legacy_3des.pcap
+python -m core.analyze tests/fixtures/pcaps/S34_legacy_ssl3.pcap
+python -m core.analyze tests/fixtures/pcaps/S35_legacy_tls1_1.pcap
 ```
 
 Add `--json` to any of the above for machine-readable output.
 
+### Report renderer
+
+```
+python -m core.report tests/fixtures/pcaps/S18_smtp_587_starttls_expired_cert.pcap --html /tmp/report.html
+open /tmp/report.html   # macOS
+```
+
+Or `--json out.json` for the schema-validated JSON form; omit both flags
+to print JSON to stdout.
+
 ### Regenerating a live capture (optional, needs Docker)
 
-See `data/pcaps/CAPTURES.md` for the exact `docker compose`/`openssl`/
-`swaks`/`tshark` commands used to produce every fixture above, including
-the temporary cert swaps and second lab service used for some of them.
+See `data/pcaps/CAPTURES.md` for the exact `docker`/`openssl`/`swaks`/
+`tshark` commands used to produce every fixture above, including the
+temporary cert swaps, the second lab service, and the standalone legacy
+TLS endpoint used for some of them.
