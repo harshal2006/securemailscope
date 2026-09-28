@@ -42,6 +42,7 @@ class TLSInfo:
     cert_observable: bool
     cert_not_observable_reason: str | None  # set when cert_observable is False
     leaf_cert: CertInfo | None
+    sni_hostname: str | None = None  # from ClientHello SNI; None if absent
     chain_certs: list[CertInfo] = field(default_factory=list)
 
 

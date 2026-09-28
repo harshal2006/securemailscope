@@ -136,10 +136,35 @@ def test_strong_cipher_not_flagged(rules):
 
 
 def test_valid_cert_no_cert_findings(rules):
-    tls_info = _tls_info()  # all defaults: valid, not self-signed, strong key/hash
+    tls_info = _tls_info(sni_hostname="mail.lab.test")  # SNI matches the cert's SAN
     findings = evaluate_session(_session(tls_info=tls_info), rules)
     cert_finding_ids = {f.rule_id for f in findings} - {"TLS_VERSION_1_2"}
     assert cert_finding_ids == set()
+
+
+def test_hostname_mismatch_flagged(rules):
+    tls_info = _tls_info(sni_hostname="evil.example.com")  # cert SAN is mail.lab.test
+    findings = evaluate_session(_session(tls_info=tls_info), rules)
+    mismatch = next(f for f in findings if f.rule_id == "CERT_HOSTNAME_MISMATCH")
+    assert mismatch.severity == "HIGH"
+    assert mismatch.plan_id == "X-05"
+
+
+def test_hostname_wildcard_san_matches(rules):
+    tls_info = _tls_info(
+        sni_hostname="mail.lab.test",
+        leaf_cert=_cert(san_dns_names=["*.lab.test"]),
+    )
+    findings = evaluate_session(_session(tls_info=tls_info), rules)
+    assert not any(f.rule_id == "CERT_HOSTNAME_MISMATCH" for f in findings)
+
+
+def test_hostname_not_evaluable_when_no_sni(rules):
+    tls_info = _tls_info(sni_hostname=None)
+    findings = evaluate_session(_session(tls_info=tls_info), rules)
+    not_evaluable = next(f for f in findings if f.rule_id == "CERT_HOSTNAME_NOT_EVALUABLE")
+    assert not_evaluable.severity == "INFO"
+    assert not any(f.rule_id == "CERT_HOSTNAME_MISMATCH" for f in findings)
 
 
 # --- T-01 / T-02 / T-03: STARTTLS and plaintext-auth rules ---
@@ -326,3 +351,19 @@ def test_real_sha1_cert_pcap_triggers_cert_weak_signature_hash(rules):
     weak_hash = next(f for f in findings if f.rule_id == "CERT_WEAK_SIGNATURE_HASH")
     assert weak_hash.severity == "HIGH"
     assert weak_hash.plan_id == "X-07"
+
+
+def test_real_wrong_sni_pcap_triggers_hostname_mismatch(rules):
+    session, analysis = _real_session_and_analysis("S24_smtp_587_wrong_sni.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    mismatch = next(f for f in findings if f.rule_id == "CERT_HOSTNAME_MISMATCH")
+    assert mismatch.severity == "HIGH"
+    assert mismatch.plan_id == "X-05"
+
+
+def test_real_no_sni_pcap_reports_not_evaluable_not_mismatch(rules):
+    session, analysis = _real_session_and_analysis("S25_smtp_587_no_sni.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    rule_ids = {f.rule_id for f in findings}
+    assert "CERT_HOSTNAME_NOT_EVALUABLE" in rule_ids
+    assert "CERT_HOSTNAME_MISMATCH" not in rule_ids

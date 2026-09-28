@@ -85,6 +85,7 @@ def _session_to_dict(session, starttls_analysis, findings, score) -> dict:
         else {
             "negotiated_version": tls_info.negotiated_version,
             "cipher_suite": tls_info.cipher_suite,
+            "sni_hostname": tls_info.sni_hostname,
             "cert_observable": tls_info.cert_observable,
             "cert_not_observable_reason": tls_info.cert_not_observable_reason,
             "leaf_cert": _cert_to_dict(tls_info.leaf_cert),
@@ -115,6 +116,7 @@ def _print_text(pcap_path: Path, sessions, starttls_by_stream, report) -> None:
             t = session.tls_info
             print(f"  negotiated TLS version: {t.negotiated_version}")
             print(f"  cipher suite: {t.cipher_suite}")
+            print(f"  SNI hostname: {t.sni_hostname}")
             if t.cert_observable:
                 c = t.leaf_cert
                 print(f"  certificate: CN={c.subject_cn} issuer={c.issuer_cn} "

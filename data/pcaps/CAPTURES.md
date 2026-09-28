@@ -172,3 +172,41 @@ key is 1024 bit` and completed the TLSv1.2 handshake.
 
 **Then ran the analyzer**: reported `RSA-1024`, fired `[HIGH]
 CERT_WEAK_KEY (X-06)`, session score 70/100.
+
+## S24 — `S24_smtp_587_wrong_sni.pcap`
+
+STARTTLS SMTP on port 587, unmodified lab cert (SAN=`mail.lab.test`), but
+the client requests a *different* hostname via SNI:
+
+```
+openssl s_client -connect 127.0.0.1:2587 -starttls smtp -tls1_2 \
+        -servername notmail.lab.test -CAfile lab/certs/ca.crt
+```
+
+**Verified independently of the analyzer:**
+- `openssl s_client -verify_hostname notmail.lab.test` (forcing openssl
+  itself to check the hostname, which it doesn't by default) reported
+  `Verify return code: 62 (hostname mismatch)`; the same command with
+  `-verify_hostname mail.lab.test` reported `Verify return code: 0 (ok)`.
+- `tshark -e tls.handshake.extensions_server_name` on the capture shows
+  `notmail.lab.test` in the ClientHello.
+
+**Then ran the analyzer**: fired `[HIGH] CERT_HOSTNAME_MISMATCH (X-05)`,
+session score 70/100.
+
+## S25 — `S25_smtp_587_no_sni.pcap`
+
+Same as S24 but with `-noservername` instead, to test the "SNI absent"
+case:
+
+```
+openssl s_client -connect 127.0.0.1:2587 -starttls smtp -tls1_2 \
+        -noservername -CAfile lab/certs/ca.crt
+```
+
+**Verified**: `tshark -e tls.handshake.extensions_server_name` returns
+nothing for this capture - confirmed no SNI extension was sent at all.
+
+**Then ran the analyzer**: fired `[INFO] CERT_HOSTNAME_NOT_EVALUABLE`
+(not `CERT_HOSTNAME_MISMATCH` - hostname match is never guessed when
+there's no SNI to check it against), session score 95/100.

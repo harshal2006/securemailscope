@@ -13,6 +13,7 @@ from core.models import TLS_VERSION_NAMES, Session, TLSInfo
 
 DEFAULT_PORTS_FILE = Path(__file__).parent.parent / "rules" / "ports.yaml"
 
+TLS_HANDSHAKE_CLIENT_HELLO = "1"
 TLS_HANDSHAKE_CERTIFICATE = "11"
 TLS_HANDSHAKE_SERVER_HELLO = "2"
 
@@ -148,9 +149,15 @@ def _extract_tls_info(pkts: list[dict[str, str]]) -> TLSInfo:
     cipher_suite_code = None
     cert_hex_list = None
     cert_frame_time_epoch = None
+    sni_hostname = None
 
     for pkt in pkts:
         handshake_types = (pkt.get("tls.handshake.type") or "").split(",")
+        if TLS_HANDSHAKE_CLIENT_HELLO in handshake_types and pkt.get(
+            "tls.handshake.extensions_server_name"
+        ):
+            # Multi-valued fields come back comma-separated; SNI has one value.
+            sni_hostname = pkt["tls.handshake.extensions_server_name"].split(",")[0].strip()
         if TLS_HANDSHAKE_SERVER_HELLO in handshake_types:
             supported_version = pkt.get("tls.handshake.extensions.supported_version")
             if supported_version:
@@ -203,5 +210,6 @@ def _extract_tls_info(pkts: list[dict[str, str]]) -> TLSInfo:
         cert_observable=cert_observable,
         cert_not_observable_reason=reason,
         leaf_cert=leaf_cert,
+        sni_hostname=sni_hostname,
         chain_certs=chain_certs,
     )

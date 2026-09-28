@@ -3,8 +3,9 @@
 # this file only holds the human-facing message and score impact.
 #
 # `id` is the plan's rule numbering (X-01 expired, X-03 self-signed,
-# X-06 weak key, X-07 weak signature hash). CERT_NOT_OBSERVABLE and
-# CERT_HOSTNAME_MISMATCH (X-05, not yet implemented) have no id here.
+# X-05 hostname/SAN mismatch, X-06 weak key, X-07 weak signature hash).
+# CERT_NOT_OBSERVABLE and CERT_HOSTNAME_NOT_EVALUABLE have no id - they
+# are informational states, not findings on the plan's checklist.
 
 CERT_EXPIRED:
   id: X-01
@@ -29,6 +30,17 @@ CERT_WEAK_SIGNATURE_HASH:
   severity: HIGH
   score_impact: 25
   message: "Certificate is signed using a weak hash algorithm (MD5 or SHA-1)."
+
+CERT_HOSTNAME_MISMATCH:
+  id: X-05
+  severity: HIGH
+  score_impact: 25
+  message: "Certificate does not cover the hostname the client requested (SNI vs. SAN mismatch)."
+
+CERT_HOSTNAME_NOT_EVALUABLE:
+  severity: INFO
+  score_impact: 0
+  message: "No SNI observed in the ClientHello; hostname/SAN match cannot be evaluated (not guessed)."
 
 CERT_NOT_OBSERVABLE:
   severity: INFO

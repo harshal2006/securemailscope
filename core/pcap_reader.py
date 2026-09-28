@@ -26,6 +26,7 @@ FIELDS = [
     "tls.handshake.type",
     "tls.handshake.version",
     "tls.handshake.extensions.supported_version",
+    "tls.handshake.extensions_server_name",
     "tls.handshake.certificate",
     "tls.handshake.ciphersuite",
     "tls.alert_message.desc",

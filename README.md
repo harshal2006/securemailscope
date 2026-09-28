@@ -98,10 +98,14 @@ redacted before being placed in this output - see CLAUDE.md.
 - **Weak cipher suites** (`rules/weak_ciphers.yaml`): NULL, RC4, 3DES,
   anonymous-DH.
 - **Certificate issues** (`rules/cert_rules.yaml`): expired, self-signed,
-  weak key (RSA/DSA < 2048 bits), weak signature hash (MD5/SHA-1). Only
-  evaluated when a certificate was actually observed on the wire - never
-  guessed for TLS 1.3 sessions, where the Certificate message is
-  encrypted.
+  weak key (RSA/DSA < 2048 bits), weak signature hash (MD5/SHA-1),
+  hostname/SAN mismatch (`X-05`, RFC 6125-style match including a single
+  leftmost `*` wildcard label). Only evaluated when a certificate was
+  actually observed on the wire - never guessed for TLS 1.3 sessions,
+  where the Certificate message is encrypted. Hostname matching is only
+  attempted when the client actually sent SNI in its ClientHello; if not,
+  the finding is `CERT_HOSTNAME_NOT_EVALUABLE` (INFO), never guessed as
+  a match or mismatch.
 - **STARTTLS / plaintext auth** (`rules/starttls_rules.yaml`):
   - `T-01` - plaintext AUTH/USER/PASS observed before TLS. Always
     CRITICAL.
@@ -138,9 +142,10 @@ test coverage in `tests/`, not theoretical code-path sharing - e.g.
 | — (not implemented) | C-05 | Weak DH parameters | — | n | n |
 | `CERT_EXPIRED` | X-01 | Certificate expired | HIGH | y | y |
 | `CERT_SELF_SIGNED` | X-03 | Certificate self-signed | MEDIUM | y | y |
-| — (not implemented) | X-05 | Certificate hostname/SAN mismatch | — | n | n |
 | `CERT_WEAK_KEY` | X-06 | RSA/DSA key < 2048 bits | HIGH | y | y |
 | `CERT_WEAK_SIGNATURE_HASH` | X-07 | MD5/SHA-1 signature | HIGH | y | y |
+| `CERT_HOSTNAME_MISMATCH` | X-05 | SNI hostname not covered by cert's SAN | HIGH | y | y |
+| `CERT_HOSTNAME_NOT_EVALUABLE` | | No SNI observed; match not evaluable | INFO | y | y |
 | `CERT_NOT_OBSERVABLE` | | Cert not observable (TLS 1.3, etc.) | INFO | y | y |
 | `T-01` | T-01 | Plaintext AUTH before TLS | CRITICAL | y | y |
 | `T-02` | T-02 | STARTTLS advertised but unused | HIGH (submission) / INFO (mx) | y | y |
@@ -183,6 +188,16 @@ is theoretically capable of.
   captured the same plaintext-AUTH-without-STARTTLS scenario on both
   port 587 (submission, fires HIGH) and port 25 (mx, fires INFO) and
   confirmed both with the analyzer.
+- `CERT_HOSTNAME_MISMATCH` (X-05): connected with `openssl s_client
+  -servername notmail.lab.test` against a cert whose SAN is only
+  `mail.lab.test`. Independently confirmed the mismatch with `openssl
+  s_client -verify_hostname` (`Verify return code: 62, hostname
+  mismatch`) and with `tshark` (SNI extension shows `notmail.lab.test`)
+  before running the analyzer, which fired `CERT_HOSTNAME_MISMATCH`
+  (HIGH). A second capture with `-noservername` (confirmed via `tshark`
+  to carry no SNI extension at all) correctly produces
+  `CERT_HOSTNAME_NOT_EVALUABLE` (INFO) instead of guessing a
+  match/mismatch.
 
 - Weak-key (RSA-1024) and weak-signature-hash (SHA-1) certificate
   findings: `cryptography` refuses to sign with SHA-1 at the API level,
@@ -208,7 +223,6 @@ objects in unit tests, not real pcaps):
 - IMAP/POP3 STARTTLS timeline parsing (capability detection, STLS) -
   implemented with the same logic as SMTP, but no real IMAP/POP3
   plaintext-auth pcap has been captured, only SMTP.
-- `X-05` (certificate hostname/SAN mismatch) - not implemented yet.
 
 **Not built:** report rendering (HTML/PDF), a web UI or dashboard, an
 API, and any ML-based scoring or anomaly detection. Out of scope for this

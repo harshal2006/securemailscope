@@ -27,6 +27,20 @@ def _load_yaml(name: str) -> dict:
         return yaml.safe_load(f)
 
 
+def _hostname_matches_san(hostname: str, san_dns_names: list[str]) -> bool:
+    """RFC 6125-style match: exact, or a single leftmost `*` label wildcard."""
+    hostname = hostname.rstrip(".").lower()
+    for san in san_dns_names:
+        san = san.rstrip(".").lower()
+        if san == hostname:
+            return True
+        if san.startswith("*."):
+            san_suffix = san[1:]  # ".example.com"
+            if hostname.endswith(san_suffix) and hostname.count(".") == san.count("."):
+                return True
+    return False
+
+
 def load_rules() -> dict:
     return {
         "tls_version": _load_yaml("tls_version_rules.yaml"),
@@ -108,6 +122,25 @@ def evaluate_session(
         if cert.signature_hash_algorithm in WEAK_SIGNATURE_HASHES:
             findings.append(
                 _finding(cert_rules["CERT_WEAK_SIGNATURE_HASH"], "CERT_WEAK_SIGNATURE_HASH", session)
+            )
+
+        if tls_info.sni_hostname is None:
+            findings.append(
+                _finding(
+                    cert_rules["CERT_HOSTNAME_NOT_EVALUABLE"], "CERT_HOSTNAME_NOT_EVALUABLE", session
+                )
+            )
+        elif not _hostname_matches_san(tls_info.sni_hostname, cert.san_dns_names):
+            findings.append(
+                _finding(
+                    cert_rules["CERT_HOSTNAME_MISMATCH"],
+                    "CERT_HOSTNAME_MISMATCH",
+                    session,
+                    message=(
+                        f"Client requested '{tls_info.sni_hostname}' (SNI) but the "
+                        f"certificate's SAN only covers {cert.san_dns_names}."
+                    ),
+                )
             )
     else:
         cert_rules = rules["cert"]

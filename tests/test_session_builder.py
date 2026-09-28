@@ -176,3 +176,29 @@ def test_sha1_cert_signature_hash_observed(sha1_cert_session):
     cert = sha1_cert_session.tls_info.leaf_cert
     assert cert.signature_hash_algorithm == "sha1"
     assert cert.key_size == 2048  # only the signature hash is weak here
+
+
+@pytest.fixture(scope="module")
+def wrong_sni_session():
+    packets = read_packets(FIXTURES / "S24_smtp_587_wrong_sni.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    return sessions[0]
+
+
+def test_wrong_sni_is_observed(wrong_sni_session):
+    tls_info = wrong_sni_session.tls_info
+    assert tls_info.sni_hostname == "notmail.lab.test"
+    assert tls_info.leaf_cert.san_dns_names == ["mail.lab.test"]
+
+
+@pytest.fixture(scope="module")
+def no_sni_session():
+    packets = read_packets(FIXTURES / "S25_smtp_587_no_sni.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    return sessions[0]
+
+
+def test_no_sni_observed(no_sni_session):
+    assert no_sni_session.tls_info.sni_hostname is None
