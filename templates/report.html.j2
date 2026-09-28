@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SecureMailScope report — {{ report.pcap_path }}</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --border: #2a2f3a; --text: #e6e8eb;
+    --muted: #9aa3af; --crit: #ff5470; --high: #ff9f43; --med: #f5d90a;
+    --low: #4fd1c5; --info: #6c8cff; --ok: #34d399;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 24px; line-height: 1.5;
+  }
+  h1, h2, h3 { font-weight: 600; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h2 { font-size: 17px; margin-top: 36px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { font-size: 14px; margin-top: 20px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 20px; margin-bottom: 16px;
+  }
+  .grade-row { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .grade {
+    font-size: 40px; font-weight: 700; width: 72px; height: 72px;
+    border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    background: var(--border);
+  }
+  .grade.A, .grade.B { color: var(--ok); }
+  .grade.C, .grade.D { color: var(--med); }
+  .grade.F { color: var(--crit); }
+  .grade.NA { color: var(--muted); }
+  .score-num { font-size: 28px; font-weight: 700; }
+  .stat { font-size: 13px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  tr:last-child td { border-bottom: none; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  }
+  .badge.CRITICAL { background: rgba(255,84,112,0.15); color: var(--crit); }
+  .badge.HIGH { background: rgba(255,159,67,0.15); color: var(--high); }
+  .badge.MEDIUM { background: rgba(245,217,10,0.15); color: var(--med); }
+  .badge.LOW { background: rgba(79,209,197,0.15); color: var(--low); }
+  .badge.INFO { background: rgba(108,140,255,0.15); color: var(--info); }
+  code { background: #0b0d11; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+  pre { background: #0b0d11; padding: 10px 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; margin: 4px 0; }
+  .session-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  .mono { font-family: "SF Mono", Menlo, monospace; }
+  .timeline-row { display: flex; gap: 8px; font-size: 12px; padding: 3px 0; }
+  .timeline-frame { color: var(--muted); width: 48px; flex-shrink: 0; }
+  .timeline-dir { width: 56px; flex-shrink: 0; color: var(--muted); }
+  .timeline-kind { width: 96px; flex-shrink: 0; color: var(--info); }
+  ul.limitations li { margin-bottom: 8px; }
+  .empty { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+
+<h1>SecureMailScope posture report</h1>
+<div class="subtitle">Source: <code>{{ report.pcap_path }}</code> — passive, offline analysis. See appendix for scope and limitations.</div>
+
+<h2>Executive summary</h2>
+<div class="panel">
+  <div class="grade-row">
+    <div class="grade {{ report.summary.grade if report.summary.grade != 'N/A' else 'NA' }}">{{ report.summary.grade }}</div>
+    <div>
+      <div class="score-num">{{ report.summary.overall_score if report.summary.overall_score is not none else '—' }}<span class="stat">/100</span></div>
+      <div class="stat">overall posture score (minimum across {{ report.summary.session_count }} session{{ 's' if report.summary.session_count != 1 else '' }})</div>
+    </div>
+    <div>
+      <div class="score-num">{{ (report.summary.observable_cert_ratio * 100) | round(0) | int if report.summary.observable_cert_ratio is not none else '—' }}{{ '%' if report.summary.observable_cert_ratio is not none else '' }}</div>
+      <div class="stat">certificates observable ({{ report.summary.observable_cert_sessions }}/{{ report.summary.tls_session_count }} TLS sessions)</div>
+    </div>
+  </div>
+  <h3>Findings by severity</h3>
+  {% if report.summary.findings_by_severity %}
+  <div class="grade-row">
+    {% for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] %}
+      {% if sev in report.summary.findings_by_severity %}
+      <div><span class="badge {{ sev }}">{{ sev }}</span> <strong>{{ report.summary.findings_by_severity[sev] }}</strong></div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty">No findings.</p>
+  {% endif %}
+</div>
+
+<h2>Endpoint inventory</h2>
+<div class="panel">
+  <table>
+    <tr><th>Stream</th><th>Protocol</th><th>Mode</th><th>Role</th><th>Endpoint</th><th>TLS version</th><th>Score</th></tr>
+    {% for s in report.sessions %}
+    <tr>
+      <td class="mono">{{ s.tcp_stream }}</td>
+      <td>{{ s.protocol }}</td>
+      <td>{{ s.tls_mode }}</td>
+      <td>{{ s.role }}</td>
+      <td class="mono">{{ s.client_ip }} → {{ s.server_ip }}:{{ s.server_port }}</td>
+      <td>{{ s.negotiated_tls_version or '—' }}</td>
+      <td>{{ s.score }}/100</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<h2>Findings by severity, with evidence</h2>
+{% for s in report.sessions %}
+  {% if s.findings %}
+  <div class="panel">
+    <div class="session-header">
+      <strong>Stream {{ s.tcp_stream }}</strong>
+      <span class="stat mono">{{ s.protocol }} · {{ s.tls_mode }} · {{ s.role }} · frames {{ s.first_frame }}–{{ s.last_frame }}</span>
+    </div>
+    <table>
+      <tr><th>Severity</th><th>Rule</th><th>Message</th><th>Score impact</th></tr>
+      {% for f in s.findings %}
+      <tr>
+        <td><span class="badge {{ f.severity }}">{{ f.severity }}</span></td>
+        <td class="mono">{{ f.rule_id }}{% if f.plan_id %} ({{ f.plan_id }}){% endif %}</td>
+        <td>{{ f.message }}</td>
+        <td>-{{ f.score_impact }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if s.timeline %}
+    <h3>STARTTLS timeline (evidence)</h3>
+    {% for ev in s.timeline %}
+    <div class="timeline-row">
+      <span class="timeline-frame mono">[{{ ev.frame_number }}]</span>
+      <span class="timeline-dir">{{ ev.direction }}</span>
+      <span class="timeline-kind">{{ ev.kind }}</span>
+      <span class="mono">{{ ev.text }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% endif %}
+{% endfor %}
+{% if report.summary.findings_by_severity|length == 0 %}
+<p class="empty">No findings across any session.</p>
+{% endif %}
+
+<h2>Certificate inventory</h2>
+<div class="panel">
+  {% set any_cert = false %}
+  <table>
+    <tr><th>Stream</th><th>Subject</th><th>Issuer</th><th>Key</th><th>Signature</th><th>SAN</th><th>Valid</th></tr>
+    {% for s in report.sessions %}
+      {% if s.certificate %}
+        {% set any_cert = true %}
+        <tr>
+          <td class="mono">{{ s.tcp_stream }}</td>
+          <td>{{ s.certificate.subject_cn }}</td>
+          <td>{{ s.certificate.issuer_cn }}{% if s.certificate.self_signed %} (self-signed){% endif %}</td>
+          <td>{{ s.certificate.key_algorithm }}-{{ s.certificate.key_size }}</td>
+          <td>{{ s.certificate.signature_hash_algorithm }}</td>
+          <td class="mono">{{ s.certificate.san_dns_names | join(', ') }}</td>
+          <td>{{ '❌ expired' if s.certificate.is_expired else '✅ valid' }}</td>
+        </tr>
+      {% elif s.cert_observable == false %}
+        <tr>
+          <td class="mono">{{ s.tcp_stream }}</td>
+          <td colspan="6" class="empty">Not observable — {{ s.cert_not_observable_reason }}</td>
+        </tr>
+      {% endif %}
+    {% endfor %}
+  </table>
+</div>
+
+{% if report.recommendations %}
+<h2>Recommendations</h2>
+<div class="panel">
+  <table>
+    <tr><th>Rule</th><th>Issue</th><th>Fix</th><th>Verify</th></tr>
+    {% for r in report.recommendations %}
+    <tr>
+      <td class="mono">{{ r.rule_id }}{% if r.plan_id %}<br>({{ r.plan_id }}){% endif %}</td>
+      <td>{{ r.title }}</td>
+      <td>{{ r.fix }}</td>
+      <td>{% if r.verification_command %}<code>{{ r.verification_command }}</code>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<h2>Appendix</h2>
+<div class="panel">
+  <h3>Scope and limitations</h3>
+  <ul class="limitations">
+    {% for l in report.limitations %}
+    <li>{{ l }}</li>
+    {% endfor %}
+  </ul>
+
+  <h3>Rule catalogue</h3>
+  <table>
+    <tr><th>Rule ID</th><th>Plan ID</th><th>Name</th><th>Severity</th></tr>
+    {% for r in report.rules_reference %}
+    <tr>
+      <td class="mono">{{ r.rule_id }}</td>
+      <td>{{ r.plan_id or '—' }}</td>
+      <td>{{ r.name }}</td>
+      <td>{% if r.severity %}<span class="badge {{ r.severity }}">{{ r.severity }}</span>{% else %}role-dependent{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+</body>
+</html>

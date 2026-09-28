@@ -1,0 +1,125 @@
+# Fix + verification guidance for each rule we actually detect. Only
+# covers actionable findings (not informational states like
+# CERT_NOT_OBSERVABLE) - there is nothing to "fix" for those.
+#
+# Config snippets are Postfix (main.cf) / Dovecot (conf.d/10-ssl.conf)
+# since that's the stack this project's lab uses; the underlying advice
+# (disable legacy protocol/cipher, renew/replace cert, enforce TLS
+# before AUTH) applies to any MTA/IMAP/POP3 server.
+
+NO_TLS_OBSERVED:
+  title: "No TLS/STARTTLS ever observed"
+  fix: >-
+    Enable STARTTLS (or implicit TLS) on this listener and require it
+    before AUTH. Postfix: `smtpd_tls_security_level = encrypt` (or
+    `may` if opportunistic TLS on port 25 is acceptable) plus
+    `smtpd_tls_auth_only = yes`. Dovecot: `ssl = required`.
+  verification_command: "openssl s_client -starttls smtp -connect <host>:<port>"
+
+TLS_VERSION_SSL3:
+  title: "SSLv3 negotiated (POODLE)"
+  fix: >-
+    Disable SSLv3 entirely. Postfix: `smtpd_tls_protocols = !SSLv2,
+    !SSLv3`. Dovecot: `ssl_min_protocol = TLSv1.2`.
+  verification_command: "openssl s_client -ssl3 -connect <host>:<port>  # should fail"
+
+TLS_VERSION_1_0:
+  title: "TLS 1.0 negotiated"
+  fix: >-
+    Disable TLS 1.0. Postfix: `smtpd_tls_protocols = !SSLv2, !SSLv3,
+    !TLSv1`. Dovecot: `ssl_min_protocol = TLSv1.2`.
+  verification_command: "openssl s_client -tls1 -connect <host>:<port>  # should fail"
+
+TLS_VERSION_1_1:
+  title: "TLS 1.1 negotiated"
+  fix: >-
+    Disable TLS 1.1. Postfix: `smtpd_tls_protocols = !SSLv2, !SSLv3,
+    !TLSv1, !TLSv1.1`. Dovecot: `ssl_min_protocol = TLSv1.2`.
+  verification_command: "openssl s_client -tls1_1 -connect <host>:<port>  # should fail"
+
+TLS_VERSION_1_2:
+  title: "TLS 1.2 negotiated (acceptable, TLS 1.3 preferred)"
+  fix: >-
+    Not urgent. To prefer TLS 1.3 where clients support it, ensure
+    TLS 1.3 is enabled and, longer term, consider requiring it once
+    client compatibility allows: `smtpd_tls_protocols = !SSLv2, !SSLv3,
+    !TLSv1, !TLSv1.1, !TLSv1.2` (Postfix), `ssl_min_protocol = TLSv1.3`
+    (Dovecot).
+  verification_command: "openssl s_client -tls1_3 -connect <host>:<port>"
+
+WEAK_CIPHER_SUITE:
+  title: "Weak or broken cipher suite negotiated"
+  fix: >-
+    Remove NULL/RC4/3DES/export/anonymous-DH ciphers from the allowed
+    list. Postfix: `smtpd_tls_mandatory_ciphers = high` plus
+    `smtpd_tls_exclude_ciphers = aNULL, eNULL, EXPORT, RC4, 3DES, MD5`.
+    Dovecot: `ssl_cipher_list = HIGH:!aNULL:!eNULL:!RC4:!3DES:!MD5`.
+  verification_command: "openssl s_client -cipher RC4:3DES -connect <host>:<port>  # should fail"
+
+NO_FORWARD_SECRECY:
+  title: "Static RSA/DH key exchange (no forward secrecy)"
+  fix: >-
+    Prefer ECDHE/DHE cipher suites so a single compromised private key
+    can't retroactively decrypt captured traffic. Postfix:
+    `smtpd_tls_mandatory_ciphers = high` (modern OpenSSL defaults to
+    ECDHE-preferring suites); explicitly exclude static-RSA suites via
+    `smtpd_tls_exclude_ciphers = aNULL, eNULL, kRSA`. Dovecot:
+    `ssl_cipher_list = HIGH:!kRSA:!aNULL:!eNULL`.
+  verification_command: "openssl s_client -cipher kRSA -connect <host>:<port>  # should fail"
+
+CERT_EXPIRED:
+  title: "Certificate expired (or not yet valid)"
+  fix: "Renew the certificate and reload the service (`postfix reload` / `doveadm reload`)."
+  verification_command: "openssl x509 -in <cert> -noout -dates"
+
+CERT_SELF_SIGNED:
+  title: "Certificate is self-signed"
+  fix: >-
+    Replace with a certificate issued by a publicly trusted CA (or your
+    organization's internal CA that clients actually trust).
+  verification_command: "openssl x509 -in <cert> -noout -issuer -subject"
+
+CERT_WEAK_KEY:
+  title: "Certificate key too small (RSA/DSA < 2048 bits)"
+  fix: "Reissue the certificate with at least a 2048-bit RSA key (or an EC key)."
+  verification_command: "openssl x509 -in <cert> -noout -text | grep 'Public-Key'"
+
+CERT_WEAK_SIGNATURE_HASH:
+  title: "Certificate signed with MD5 or SHA-1"
+  fix: "Reissue the certificate signed with SHA-256 or stronger."
+  verification_command: "openssl x509 -in <cert> -noout -text | grep 'Signature Algorithm'"
+
+CERT_HOSTNAME_MISMATCH:
+  title: "Certificate does not cover the requested hostname (SNI vs SAN)"
+  fix: >-
+    Issue a certificate whose SAN includes every hostname clients
+    actually connect to, or fix DNS/client config so the requested name
+    matches what the certificate covers.
+  verification_command: "openssl s_client -servername <hostname> -verify_hostname <hostname> -connect <host>:<port>"
+
+T-01:
+  title: "Plaintext authentication observed before TLS"
+  fix: >-
+    Require TLS before AUTH is accepted. Postfix:
+    `smtpd_tls_auth_only = yes`. Dovecot: `disable_plaintext_auth = yes`
+    (with `ssl = required`).
+  verification_command: "swaks --server <host>:<port> -au <user> -ap <pass>  # without --tls, should be rejected"
+
+T-02:
+  title: "STARTTLS advertised but the client did not use it"
+  fix: >-
+    This is a client-side behavior finding, not a server misconfig -
+    the server already offers STARTTLS. On a client-facing
+    (submission) port, also consider `smtpd_tls_auth_only = yes` so a
+    client that ignores STARTTLS can't authenticate in the clear
+    anyway (see T-01's fix).
+  verification_command: "openssl s_client -starttls smtp -connect <host>:<port>"
+
+T-03:
+  title: "STARTTLS/STLS not offered by the server at all"
+  fix: >-
+    Enable STARTTLS. Postfix: remove
+    `smtpd_tls_security_level = none` overrides for this service.
+    Dovecot: `ssl = yes` (or `required`) and ensure `starttls` isn't
+    disabled per-protocol.
+  verification_command: "openssl s_client -starttls smtp -connect <host>:<port>"

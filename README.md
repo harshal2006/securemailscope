@@ -27,7 +27,7 @@ Then, from `securemailscope/`:
 ```
 python3 -m venv .venv
 source .venv/bin/activate
-pip install cryptography pyyaml pytest
+pip install cryptography pyyaml pytest jinja2 jsonschema
 ```
 
 (There is no `pip install -e .` packaging step yet - `pyproject.toml` only
@@ -91,6 +91,25 @@ Emits a single JSON object: `{pcap, overall_score, sessions: [...]}`, where
 each session includes its TLS/cert info, its full STARTTLS timeline (with
 frame numbers), findings, and score. All credential-bearing text is
 redacted before being placed in this output - see CLAUDE.md.
+
+## Generating a report
+
+`core/report.py` renders the same analysis into a richer, structured report
+(executive summary, endpoint inventory, findings with evidence, certificate
+inventory, recommendations, and an appendix of limitations/rule catalogue)
+as JSON (schema-validated against `REPORT_JSON_SCHEMA`) or HTML:
+
+```
+python -m core.report <path-to-pcap>                # JSON to stdout
+python -m core.report <path-to-pcap> --json out.json
+python -m core.report <path-to-pcap> --html out.html
+```
+
+Recommendations (`rules/recommendations.yaml`) are only included for rule
+IDs that actually appear as findings, and only for rules we implemented -
+never the full plan's imagined catalogue. Each has a short fix (with
+Postfix/Dovecot config snippets where relevant) and a verification command.
+All credential-bearing text is redacted the same way as `core/analyze.py`.
 
 ## What the rules check
 
