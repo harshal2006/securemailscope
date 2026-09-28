@@ -251,3 +251,36 @@ def test_pop3_stls_session_cert_observable():
     assert sessions[0].protocol == "pop3"
     assert sessions[0].tls_mode == "starttls"
     assert sessions[0].tls_info.cert_observable is True
+
+
+# --- Legacy TLS/cipher captures (Debian Jessie, OpenSSL 1.0.1t, both
+# client and server, on a dedicated docker network) ---
+
+
+def test_legacy_rc4_cipher_suite_observed():
+    packets = read_packets(FIXTURES / "S32_legacy_rc4.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    assert sessions[0].tls_mode == "implicit"
+    assert sessions[0].tls_info.cipher_suite == "0x0005"  # TLS_RSA_WITH_RC4_128_SHA
+
+
+def test_legacy_3des_cipher_suite_observed():
+    packets = read_packets(FIXTURES / "S33_legacy_3des.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    assert sessions[0].tls_info.cipher_suite == "0x000a"  # TLS_RSA_WITH_3DES_EDE_CBC_SHA
+
+
+def test_legacy_sslv3_version_observed():
+    packets = read_packets(FIXTURES / "S34_legacy_ssl3.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    assert sessions[0].tls_info.negotiated_version == "SSL 3.0"
+
+
+def test_legacy_tls1_1_version_observed():
+    packets = read_packets(FIXTURES / "S35_legacy_tls1_1.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    assert sessions[0].tls_info.negotiated_version == "TLS 1.1"

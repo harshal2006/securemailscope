@@ -126,21 +126,19 @@ across its sessions.
 Plan ID is the hackathon plan's own rule numbering, where one has been
 confirmed; a blank means no plan ID applies (informational finding) or
 the rule isn't implemented yet. "Real pcap" / "Synthetic" reflect actual
-test coverage in `tests/`, not theoretical code-path sharing - e.g.
-`TLS_VERSION_1_1` shares its matching code with `TLS_VERSION_1_0`, which
-*is* tested, but has no test of its own, so it's marked untested here.
+test coverage in `tests/`, not theoretical code-path sharing.
 
 | Rule ID | Plan ID | Name | Severity | Real pcap | Synthetic |
 |---|---|---|---|---|---|
 | `NO_TLS_OBSERVED` | | No TLS/STARTTLS observed at all | CRITICAL | y | y |
-| `TLS_VERSION_SSL3` | P-02 | SSLv3 negotiated | CRITICAL | n | n |
+| `TLS_VERSION_SSL3` | P-02 | SSLv3 negotiated | CRITICAL | y | n |
 | `TLS_VERSION_1_0` | P-02 | TLS 1.0 negotiated | HIGH | y | y |
-| `TLS_VERSION_1_1` | P-02 | TLS 1.1 negotiated | HIGH | n | n |
+| `TLS_VERSION_1_1` | P-02 | TLS 1.1 negotiated | HIGH | y | n |
 | `TLS_VERSION_1_2` | P-03 | TLS 1.2 negotiated | LOW | y | y |
 | `TLS_VERSION_1_3` | | TLS 1.3 negotiated | INFO | y | y |
-| `WEAK_CIPHER_SUITE` | C-02 | NULL/RC4/3DES/anon-DH cipher | HIGH | n | y |
+| `WEAK_CIPHER_SUITE` | C-02 | NULL/RC4/3DES/anon-DH cipher | HIGH | y | y |
 | — (not implemented) | C-03 | Weak DH parameters (<=1024 bits) | — | n | n |
-| `NO_FORWARD_SECRECY` | C-05 | Static RSA/DH key exchange (no forward secrecy) | MEDIUM | n* | y |
+| `NO_FORWARD_SECRECY` | C-05 | Static RSA/DH key exchange (no forward secrecy) | MEDIUM | y | y |
 | `FORWARD_SECRECY_NOT_EVALUABLE` | | Cipher suite not in our kex classification table | INFO | n | y |
 | `CERT_EXPIRED` | X-01 | Certificate expired | HIGH | y | y |
 | `CERT_SELF_SIGNED` | X-03 | Certificate self-signed | MEDIUM | y | y |
@@ -153,11 +151,14 @@ test coverage in `tests/`, not theoretical code-path sharing - e.g.
 | `T-02` | T-02 | STARTTLS advertised but unused | HIGH (submission) / INFO (mx) | y | y |
 | `T-03` | T-03 | STARTTLS not offered at all | HIGH (submission) / LOW (mx) | y | y |
 
-\* `NO_FORWARD_SECRECY` itself has never fired on a real capture - every
-real session we have negotiated an ephemeral suite (ECDHE or TLS 1.3),
-confirmed by checking each fixture's cipher_suite. The *absence* of the
-finding (has-forward-secrecy path) IS confirmed on real captures; the
-finding *firing* (static kex) is synthetic-only.
+`TLS_VERSION_SSL3`, `TLS_VERSION_1_1`, `WEAK_CIPHER_SUITE`, and
+`NO_FORWARD_SECRECY` are now real-verified against a purpose-built
+legacy TLS endpoint (Debian Jessie, OpenSSL 1.0.1t, both client and
+server) - see below and `data/pcaps/CAPTURES.md` (S32-S35). The
+earlier attempt against our *mail-server* lab genuinely failed because
+the mail server itself (modern OpenSSL) doesn't support these
+configs; controlling both ends of a dedicated TLS test endpoint removed
+that constraint.
 
 ## Verified vs not yet verified
 
@@ -234,29 +235,35 @@ is theoretically capable of.
   (`tls.handshake.version = 0x0301` on both ClientHello and ServerHello)
   before running the analyzer, which fired `TLS_VERSION_1_0` HIGH.
 
-**Explicitly attempted and found genuinely infeasible, not faked:**
-weak cipher suites (RC4/3DES/NULL/anonymous-DH). Tried three approaches:
-local OpenSSL 3.0.18 (`no cipher match` - RC4/3DES aren't compiled in
-at all, not just policy-blocked), Python's `ssl` module (same result,
-same underlying system OpenSSL), and a Debian Jessie (2016,
-OpenSSL 1.0.1t) container as the *client*, attached to the lab's docker
-network - this one genuinely has RC4/3DES cipher suites available
-client-side, but the handshake still fails
-(`sslv3 alert handshake failure`) because the lab *server* (Debian
-bookworm, OpenSSL 3.0) doesn't support these ciphers either - weak
-cipher negotiation needs both sides to agree, and getting a real
-capture would require building an entirely separate legacy mail server
-image, which is out of scope here.
+- `TLS_VERSION_SSL3`, `TLS_VERSION_1_1`, `WEAK_CIPHER_SUITE` (RC4,
+  3DES), and `NO_FORWARD_SECRECY`: a dedicated legacy TLS test endpoint
+  (two Debian Jessie/OpenSSL 1.0.1t containers, one as `openssl
+  s_server`, one as client, on a private docker network) forced each
+  config one at a time. `openssl s_client` and `tshark` independently
+  confirmed the negotiated protocol/cipher on the wire before running
+  the analyzer each time (e.g. `Cipher is RC4-SHA` /
+  `tls.handshake.ciphersuite = 0x0005`). `NO_FORWARD_SECRECY` got real
+  coverage as a side effect: RC4-SHA is static-RSA key exchange.
+
+**Previously found infeasible against the mail-server lab, now closed
+with a dedicated legacy TLS endpoint:** weak cipher suites
+(RC4/3DES) and SSLv3/TLS 1.1. The earlier attempt used a legacy
+*client* (Debian Jessie, OpenSSL 1.0.1t) against our *mail-server* lab
+(Debian bookworm, OpenSSL 3.0) and genuinely failed
+(`sslv3 alert handshake failure`) - the server itself didn't support
+these configs, and weak cipher/protocol negotiation needs both sides to
+agree. The fix: a purpose-built legacy TLS test endpoint controlling
+*both* ends (two Debian Jessie containers on a dedicated docker
+network, one running `openssl s_server`, no mail server needed since
+these rules only depend on TLS-layer facts) - see
+`data/pcaps/CAPTURES.md` (S32-S35). All four (RC4, 3DES, SSLv3,
+TLS 1.1) worked; none were infeasible once both ends were controlled.
+NULL ciphers and anonymous-DH were not attempted (not required by this
+round's task) and remain synthetic-only.
 
 **Not yet verified against real captures** (implemented, but only
 exercised with synthetic `Session`/`TLSInfo`/`CertInfo`/`StarttlsAnalysis`
 objects in unit tests, not real pcaps):
-- `SSL 3.0` and `TLS 1.1` findings - no test at all, real or synthetic,
-  exercises these two specifically (only TLS 1.0/1.2/1.3 have dedicated
-  tests), even though the matching code path is shared. (SSLv3 itself
-  was not attempted for real capture, for the same reason as the weak
-  ciphers above - it predates modern OpenSSL's supported protocol list
-  entirely.)
 - IMAP/POP3 STARTTLS timeline parsing (capability detection, STLS,
   T-01/T-02): captured plaintext `LOGIN`/`USER`+`PASS` and
   STARTTLS/STLS-then-auth for both protocols. This surfaced two real
@@ -272,13 +279,6 @@ objects in unit tests, not real pcaps):
   (`core/starttls.py`). Confirmed with `tshark`/`strings` that
   credentials never leak in either the wire capture (STARTTLS/STLS
   cases) or the tool's own output (all cases, via redaction).
-- `NO_FORWARD_SECRECY` (C-05): every real capture we have negotiated an
-  ephemeral cipher suite (ECDHE on TLS <= 1.2, or TLS 1.3, which is
-  always ephemeral), confirmed by checking each fixture's negotiated
-  `cipher_suite`. The *absence* of the finding is real-verified; the
-  finding itself firing (static RSA/DH key exchange) is
-  synthetic-only - no real capture with a static-kex suite exists.
-
 **Not implemented: `C-03`** (weak DH parameters, <=1024 bits). Checked
 feasibility first: tshark's TLS dissector does expose
 `tls.handshake.p_len` (the DH prime length) for classic (non-EC)

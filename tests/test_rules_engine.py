@@ -477,6 +477,47 @@ def test_dhe_kex_not_flagged(rules):
     assert not any(f.rule_id == "NO_FORWARD_SECRECY" for f in findings)
 
 
+def test_real_rc4_capture_triggers_weak_cipher_and_no_forward_secrecy(rules):
+    # Legacy openssl s_server/s_client (Debian Jessie, OpenSSL 1.0.1t) on
+    # a dedicated docker network, forced to RC4-SHA. Independently
+    # confirmed with openssl s_client ("Cipher is RC4-SHA") and tshark
+    # (ciphersuite 0x0005) before running the analyzer.
+    session, analysis = _real_session_and_analysis("S32_legacy_rc4.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    weak = next(f for f in findings if f.rule_id == "WEAK_CIPHER_SUITE")
+    assert weak.severity == "HIGH"
+    assert weak.plan_id == "C-02"
+    # Bonus real coverage: RC4-SHA (TLS_RSA_WITH_RC4_128_SHA) is static
+    # RSA key exchange, so this also proves C-05 for real.
+    no_fs = next(f for f in findings if f.rule_id == "NO_FORWARD_SECRECY")
+    assert no_fs.severity == "MEDIUM"
+    assert no_fs.plan_id == "C-05"
+
+
+def test_real_3des_capture_triggers_weak_cipher(rules):
+    session, analysis = _real_session_and_analysis("S33_legacy_3des.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    weak = next(f for f in findings if f.rule_id == "WEAK_CIPHER_SUITE")
+    assert weak.severity == "HIGH"
+    assert "3DES" in weak.message
+
+
+def test_real_sslv3_capture_triggers_tls_version_ssl3(rules):
+    session, analysis = _real_session_and_analysis("S34_legacy_ssl3.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    version = next(f for f in findings if f.rule_id == "TLS_VERSION_SSL3")
+    assert version.severity == "CRITICAL"
+    assert version.plan_id == "P-02"
+
+
+def test_real_tls1_1_capture_triggers_tls_version_1_1(rules):
+    session, analysis = _real_session_and_analysis("S35_legacy_tls1_1.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    version = next(f for f in findings if f.rule_id == "TLS_VERSION_1_1")
+    assert version.severity == "HIGH"
+    assert version.plan_id == "P-02"
+
+
 def test_unrecognized_cipher_suite_reports_not_evaluable_not_guessed(rules):
     tls_info = _tls_info(cipher_suite="0xdead")  # not a real/known suite
     findings = evaluate_session(_session(tls_info=tls_info), rules)

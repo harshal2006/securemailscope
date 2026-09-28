@@ -288,6 +288,84 @@ Genuinely attempted, not faked. Three approaches tried:
    `--allow-unauthenticated` just to install `openssl`), which was
    judged out of scope for this "if time remains" item.
 
+   **Update, later session:** this gap is closed - see S32-S35 below.
+   The fix was controlling *both* ends: a legacy client alone (as tried
+   above) can't force a modern server into RC4/3DES/SSLv3/TLS 1.1; a
+   legacy client talking to a legacy *server* can.
+
+## S32 — `S32_legacy_rc4.pcap`, S33 — `S33_legacy_3des.pcap`, S34 — `S34_legacy_ssl3.pcap`, S35 — `S35_legacy_tls1_1.pcap`
+
+Legacy TLS/cipher captures, using a purpose-built legacy TLS endpoint
+instead of the mail server lab - `openssl s_server` (a raw TLS test
+server, not SMTP) is enough to exercise the parser, since these rules
+only depend on TLS-layer facts (cipher suite, protocol version),
+not application-layer content.
+
+Setup (both containers removed after capture; not part of the
+committed `lab/` - this was a one-off, documented here for
+reproducibility):
+
+```
+docker network create legacy-tls-net
+
+docker run --platform linux/amd64 --name legacy-tls-server \
+    --network legacy-tls-net -d debian:jessie sleep 3600
+docker run --platform linux/amd64 --name legacy-tls-client \
+    --network legacy-tls-net -d debian:jessie sleep 3600
+
+# In both containers: point apt at archive.debian.org (jessie is EOL)
+# and install with --allow-unauthenticated (unsigned archive keys):
+cat > /etc/apt/sources.list <<'EOF'
+deb http://archive.debian.org/debian jessie main
+deb http://archive.debian.org/debian-security jessie/updates main
+EOF
+apt-get -o Acquire::Check-Valid-Until=false update
+apt-get install -y --allow-unauthenticated openssl tcpdump   # tcpdump: client only
+
+# Server: self-signed cert + openssl s_server on a non-standard port.
+# Port 587 was tried first and rejected - tshark's built-in SMTP-port
+# association grabbed the TLS bytes before the TLS heuristic dissector
+# got a chance, so port 8587 was used instead.
+openssl req -x509 -newkey rsa:2048 -keyout server.key -out server.crt \
+    -days 365 -nodes -subj '/CN=mail.lab.test'
+openssl s_server -accept 8587 -cert server.crt -key server.key -www \
+    -cipher RC4-SHA        # or DES-CBC3-SHA / -ssl3 / -tls1_1
+
+# Client: tcpdump on the container's own eth0 (container-to-container
+# traffic never reaches the host's lo0, unlike the loopback-published
+# lab captures elsewhere in this file), then connect:
+tcpdump -i eth0 -w capture.pcap 'tcp port 8587' &
+openssl s_client -connect legacy-tls-server:8587 -cipher RC4-SHA </dev/null
+# docker cp legacy-tls-client:/capture.pcap ...
+```
+
+Port 8587 was registered in `rules/ports.yaml` (smtp, implicit,
+submission role) so the analyzer recognizes these sessions.
+
+**Verified independently of the analyzer, before running it, for each:**
+- RC4 (S32): `openssl s_client` reported `Cipher is RC4-SHA`, `Protocol:
+  TLSv1.2`. `tshark` confirms `tls.handshake.ciphersuite = 0x0005`
+  (`TLS_RSA_WITH_RC4_128_SHA`) on the ServerHello.
+- 3DES (S33): `Cipher is DES-CBC3-SHA`. `tshark` confirms
+  `ciphersuite = 0x000a` (`TLS_RSA_WITH_3DES_EDE_CBC_SHA`).
+- SSLv3 (S34): `Protocol: SSLv3`. `tshark` confirms
+  `tls.handshake.version = 0x0300` on both ClientHello and ServerHello.
+- TLS 1.1 (S35): `Protocol: TLSv1.1`. `tshark` confirms
+  `tls.handshake.version = 0x0302`.
+
+**Then ran the analyzer against each:**
+- S32 (RC4): fires `[HIGH] WEAK_CIPHER_SUITE (C-02)` **and** `[MEDIUM]
+  NO_FORWARD_SECRECY (C-05)` - RC4-SHA is `TLS_RSA_WITH_RC4_128_SHA`,
+  static RSA key exchange, so this capture gives C-05 its first real
+  (not just synthetic) coverage too.
+- S33 (3DES): fires `[HIGH] WEAK_CIPHER_SUITE (C-02)`.
+- S34 (SSLv3): fires `[CRITICAL] TLS_VERSION_SSL3 (P-02)`.
+- S35 (TLS 1.1): fires `[HIGH] TLS_VERSION_1_1 (P-02)`.
+
+None of the four were infeasible - the earlier "genuinely infeasible"
+finding was specific to forcing a *modern* server into weak
+configs; controlling both ends removes that constraint entirely.
+
 ## S28 — `S28_imap_2143_plaintext_login.pcap`
 
 IMAP plaintext `LOGIN` without STARTTLS. Sent directly over `nc` (no TLS

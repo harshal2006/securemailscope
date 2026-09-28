@@ -17,7 +17,10 @@ smtp:
     mx: [25, 2525]
     submission: [587, 2587, 2588]  # 2588: lab's STARTTLS-disabled variant, see lab/docker
   implicit_ports:
-    submission: [465, 4465]
+    # 8587: legacy-cipher/TLS-version test endpoint (raw `openssl
+    # s_server`, implicit TLS from byte one, no STARTTLS) - see
+    # lab/legacy-tls/ and data/pcaps/CAPTURES.md.
+    submission: [465, 4465, 8587]
 
 imap:
   starttls_ports:
