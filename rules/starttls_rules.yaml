@@ -9,12 +9,14 @@
 
 T-01:
   rule_id: T-01
+  id: T-01
   severity: CRITICAL
   score_impact: 60
   message: "Plaintext authentication (AUTH/USER/PASS) observed before TLS was established."
 
 T-02:
   rule_id: T-02
+  id: T-02
   by_role:
     mx:
       severity: INFO
@@ -26,6 +28,7 @@ T-02:
 
 T-03:
   rule_id: T-03
+  id: T-03
   by_role:
     mx:
       severity: LOW

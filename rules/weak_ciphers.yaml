@@ -1,8 +1,13 @@
 # Cipher suite hex codes (as 0xNNNN, lowercase) known to be weak/broken.
 # Not exhaustive - covers NULL, RC4, 3DES, and anonymous-DH suites, the
 # categories most likely to show up in a legacy mail server's config.
+#
+# `id` is the plan's rule numbering (C-02 = weak cipher suite). C-03
+# (no forward secrecy) and C-05 (weak DH params) are in the plan but not
+# implemented here - see README's rule table.
 
 rule_id: WEAK_CIPHER_SUITE
+id: C-02
 severity: HIGH
 score_impact: 20
 message: "Negotiated cipher suite is weak or broken."

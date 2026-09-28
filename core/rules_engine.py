@@ -46,6 +46,7 @@ def _finding(rule_meta: dict, rule_id: str, session: Session, message: str | Non
         tcp_stream=session.tcp_stream,
         protocol=session.protocol,
         server_port=session.server_port,
+        plan_id=rule_meta.get("id"),
     )
 
 
@@ -132,6 +133,7 @@ def _finding_by_role(rule_meta: dict, rule_id: str, session: Session) -> Finding
         tcp_stream=session.tcp_stream,
         protocol=session.protocol,
         server_port=session.server_port,
+        plan_id=rule_meta.get("id"),
     )
 
 

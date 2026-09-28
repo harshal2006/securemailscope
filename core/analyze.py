@@ -136,7 +136,8 @@ def _print_text(pcap_path: Path, sessions, starttls_by_stream, report) -> None:
         if session_score.findings:
             print("  findings:")
             for f in session_score.findings:
-                print(f"    [{f.severity}] {f.rule_id}: {f.message}")
+                plan_suffix = f" ({f.plan_id})" if f.plan_id else ""
+                print(f"    [{f.severity}] {f.rule_id}{plan_suffix}: {f.message}")
         print(f"  session score: {session_score.score}/100")
         print()
 

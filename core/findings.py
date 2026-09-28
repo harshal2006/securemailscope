@@ -14,3 +14,4 @@ class Finding:
     tcp_stream: int
     protocol: str
     server_port: int
+    plan_id: str | None = None  # the hackathon plan's rule numbering, if any

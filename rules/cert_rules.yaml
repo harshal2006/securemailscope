@@ -1,23 +1,31 @@
 # Severity/scoring metadata for certificate findings. Matching conditions
 # (e.g. what counts as a "weak" key size) live in core/rules_engine.py;
 # this file only holds the human-facing message and score impact.
+#
+# `id` is the plan's rule numbering (X-01 expired, X-03 self-signed,
+# X-06 weak key, X-07 weak signature hash). CERT_NOT_OBSERVABLE and
+# CERT_HOSTNAME_MISMATCH (X-05, not yet implemented) have no id here.
 
 CERT_EXPIRED:
+  id: X-01
   severity: HIGH
   score_impact: 30
   message: "Certificate is expired (or not yet valid)."
 
 CERT_SELF_SIGNED:
+  id: X-03
   severity: MEDIUM
   score_impact: 15
   message: "Certificate is self-signed; not verifiable via a trusted CA chain."
 
 CERT_WEAK_KEY:
+  id: X-06
   severity: HIGH
   score_impact: 25
   message: "Certificate public key is below the minimum safe size (RSA/DSA < 2048 bits)."
 
 CERT_WEAK_SIGNATURE_HASH:
+  id: X-07
   severity: HIGH
   score_impact: 25
   message: "Certificate is signed using a weak hash algorithm (MD5 or SHA-1)."

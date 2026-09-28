@@ -1,27 +1,35 @@
 # Severity/scoring metadata for negotiated TLS protocol versions.
 # Matching logic lives in core/rules_engine.py; this file only holds the
 # human-facing message and score impact per version.
+#
+# `id` is the plan's rule numbering (P-02 = deprecated protocol version,
+# P-03 = TLS 1.2 acceptable-but-not-best). TLS 1.3 has no plan ID (it is
+# the target state, not a finding worth numbering) and is left without one.
 
 "SSL 3.0":
   rule_id: TLS_VERSION_SSL3
+  id: P-02
   severity: CRITICAL
   score_impact: 50
   message: "SSLv3 negotiated. SSLv3 is broken (POODLE) and must not be used."
 
 "TLS 1.0":
   rule_id: TLS_VERSION_1_0
+  id: P-02
   severity: HIGH
   score_impact: 30
   message: "TLS 1.0 negotiated. Deprecated since 2020 by all major browsers and PCI DSS."
 
 "TLS 1.1":
   rule_id: TLS_VERSION_1_1
+  id: P-02
   severity: HIGH
   score_impact: 25
   message: "TLS 1.1 negotiated. Deprecated, no longer considered secure."
 
 "TLS 1.2":
   rule_id: TLS_VERSION_1_2
+  id: P-03
   severity: LOW
   score_impact: 5
   message: "TLS 1.2 negotiated. Acceptable, but TLS 1.3 is recommended."
