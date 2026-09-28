@@ -38,6 +38,7 @@ def test_tls13_starttls_protocol_and_mode(tls13_starttls_session):
     assert s.protocol == "smtp"
     assert s.tls_mode == "starttls"
     assert s.server_port == 2525
+    assert s.role == "mx"
 
 
 def test_tls13_starttls_negotiated_version(tls13_starttls_session):

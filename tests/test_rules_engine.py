@@ -286,6 +286,22 @@ def test_real_expired_cert_pcap_triggers_cert_expired(rules):
     assert not any(f.rule_id in ("T-01", "T-02", "T-03") for f in findings)
 
 
+def test_real_s21_mx_role_downgrades_t02_to_info(rules):
+    # Same plaintext-AUTH-without-STARTTLS scenario as S17, but on port
+    # 25 (mx/server-to-server role) instead of 587 (submission). T-01 is
+    # role-agnostic and stays CRITICAL; T-02 must downgrade to INFO here,
+    # matching S17's HIGH on submission - proving the role-aware
+    # downgrade against real traffic, not just synthetic objects.
+    session, analysis = _real_session_and_analysis("S21_smtp_25_plaintext_auth_mx.pcap")
+    assert session.role == "mx"
+    findings = evaluate_session(session, rules, analysis)
+    t01 = next(f for f in findings if f.rule_id == "T-01")
+    t02 = next(f for f in findings if f.rule_id == "T-02")
+    assert t01.severity == "CRITICAL"
+    assert t02.severity == "INFO"
+    assert t02.score_impact == 0
+
+
 def test_real_selfsigned_cert_pcap_triggers_cert_self_signed(rules):
     session, analysis = _real_session_and_analysis(
         "S19_smtp_587_starttls_selfsigned_cert.pcap"

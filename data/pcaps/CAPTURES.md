@@ -101,3 +101,33 @@ openssl s_client -connect 127.0.0.1:2587 -starttls smtp -tls1_2 \
 
 **Then ran the analyzer**: reported `self_signed=True`, fired `[MEDIUM]
 CERT_SELF_SIGNED`, session score 80/100.
+
+## S20 — `S20_smtp_587_shortlived_cert.pcap`
+
+Regression fixture for the cert-expiry-uses-capture-time fix. A cert
+signed by the lab CA, valid only from T-30s to T+90s relative to
+generation, was swapped in as `valid.crt`/`valid.key`, the lab was
+restarted, and a STARTTLS session was captured with `openssl s_client
+-tls1_2` while the cert was genuinely valid (`Verify return code: 0`).
+The original cert was restored immediately after. See the commit adding
+`core/cert_parser.py`'s `reference_time` parameter for the full
+before/after comparison - wall-clock evaluation of this cert will
+permanently disagree with capture-time evaluation from now on, which is
+exactly what makes it a durable regression test.
+
+## S21 — `S21_smtp_25_plaintext_auth_mx.pcap`
+
+Same scenario as S17 (`swaks` AUTH LOGIN without `--tls`), but on port
+25 (mx/server-to-server role) instead of 587 (submission), to verify
+T-02's role-aware severity downgrade against real traffic:
+
+```
+swaks --to labuser@lab.test --from labuser@lab.test \
+      --server 127.0.0.1:2525 -au labuser -ap labpass
+```
+
+**Verified**: `python -m core.analyze` reports `T-01` as CRITICAL (role-
+agnostic, same as S17) but `T-02` as INFO (vs. HIGH on S17's submission
+port), confirming the mx/submission role split works on real captures,
+not just synthetic `Session` objects. Contains the same intentional
+cleartext dummy AUTH LOGIN exchange as S17.
