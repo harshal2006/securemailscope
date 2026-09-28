@@ -134,7 +134,7 @@ test coverage in `tests/`, not theoretical code-path sharing - e.g.
 |---|---|---|---|---|---|
 | `NO_TLS_OBSERVED` | | No TLS/STARTTLS observed at all | CRITICAL | y | y |
 | `TLS_VERSION_SSL3` | P-02 | SSLv3 negotiated | CRITICAL | n | n |
-| `TLS_VERSION_1_0` | P-02 | TLS 1.0 negotiated | HIGH | n | y |
+| `TLS_VERSION_1_0` | P-02 | TLS 1.0 negotiated | HIGH | y | y |
 | `TLS_VERSION_1_1` | P-02 | TLS 1.1 negotiated | HIGH | n | n |
 | `TLS_VERSION_1_2` | P-03 | TLS 1.2 negotiated | LOW | y | y |
 | `TLS_VERSION_1_3` | | TLS 1.3 negotiated | INFO | y | y |
@@ -218,15 +218,38 @@ is theoretically capable of.
   `capability_advertised_starttls=False` (confirmed absent, not
   unobserved) and fired `T-03` HIGH.
 
+- `TLS_VERSION_1_0`: local macOS OpenSSL 3.0.18 refuses TLS 1.0's legacy
+  ServerKeyExchange signature algorithm at its default security level
+  (`legacy sigalg disallowed or unsupported`), but `-cipher
+  DEFAULT@SECLEVEL=0` unlocks a genuine TLS 1.0 handshake (confirmed:
+  `Protocol: TLSv1`, `Verify return code: 0`, real SMTP responses flow
+  afterward). Captured and confirmed with `tshark`
+  (`tls.handshake.version = 0x0301` on both ClientHello and ServerHello)
+  before running the analyzer, which fired `TLS_VERSION_1_0` HIGH.
+
+**Explicitly attempted and found genuinely infeasible, not faked:**
+weak cipher suites (RC4/3DES/NULL/anonymous-DH). Tried three approaches:
+local OpenSSL 3.0.18 (`no cipher match` - RC4/3DES aren't compiled in
+at all, not just policy-blocked), Python's `ssl` module (same result,
+same underlying system OpenSSL), and a Debian Jessie (2016,
+OpenSSL 1.0.1t) container as the *client*, attached to the lab's docker
+network - this one genuinely has RC4/3DES cipher suites available
+client-side, but the handshake still fails
+(`sslv3 alert handshake failure`) because the lab *server* (Debian
+bookworm, OpenSSL 3.0) doesn't support these ciphers either - weak
+cipher negotiation needs both sides to agree, and getting a real
+capture would require building an entirely separate legacy mail server
+image, which is out of scope here.
+
 **Not yet verified against real captures** (implemented, but only
 exercised with synthetic `Session`/`TLSInfo`/`CertInfo`/`StarttlsAnalysis`
 objects in unit tests, not real pcaps):
-- Weak cipher suite findings (RC4/3DES/NULL/anonymous-DH) - the lab
-  server's OpenSSL only negotiates modern ciphers by default, and no
-  legacy-cipher lab config has been built.
 - `SSL 3.0` and `TLS 1.1` findings - no test at all, real or synthetic,
   exercises these two specifically (only TLS 1.0/1.2/1.3 have dedicated
-  tests), even though the matching code path is shared.
+  tests), even though the matching code path is shared. (SSLv3 itself
+  was not attempted for real capture, for the same reason as the weak
+  ciphers above - it predates modern OpenSSL's supported protocol list
+  entirely.)
 - IMAP/POP3 STARTTLS timeline parsing (capability detection, STLS) -
   implemented with the same logic as SMTP, but no real IMAP/POP3
   plaintext-auth pcap has been captured, only SMTP.

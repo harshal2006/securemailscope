@@ -238,3 +238,52 @@ False` (confirmed absent from a fully-observed EHLO reply, not just
 unobserved) and fired `[HIGH] T-03`, session score 5/100 (also hit by
 the pre-existing `NO_TLS_OBSERVED` CRITICAL finding, since this session
 never uses TLS at all).
+
+## S27 — `S27_smtp_587_tls1_0.pcap`
+
+STARTTLS SMTP on port 587, unmodified lab server, client forced to
+TLS 1.0.
+
+Plain `openssl s_client -tls1` fails on this machine's OpenSSL 3.0.18
+with `legacy sigalg disallowed or unsupported` (the default security
+level blocks TLS 1.0's older ServerKeyExchange signature scheme). Adding
+`-cipher DEFAULT@SECLEVEL=0` unlocks a genuine handshake:
+
+```
+openssl s_client -connect 127.0.0.1:2587 -starttls smtp -tls1 \
+        -cipher "DEFAULT@SECLEVEL=0" -CAfile lab/certs/ca.crt
+```
+
+**Verified independently of the analyzer:** `openssl s_client` reported
+`Protocol: TLSv1`, `Cipher is ECDHE-RSA-AES256-SHA`, `Verify return code:
+0 (ok)`, and real SMTP application data (`250 CHUNKING`, `221 2.0.0
+Bye`) flowed afterward - not just a cosmetic protocol label. `tshark`
+confirms `tls.handshake.version = 0x0301` (TLS 1.0) on both the
+ClientHello and ServerHello.
+
+**Then ran the analyzer**: fired `[HIGH] TLS_VERSION_1_0 (P-02)`,
+session score 70/100.
+
+## Weak cipher suites (RC4/3DES/NULL/anonymous-DH) - not captured
+
+Genuinely attempted, not faked. Three approaches tried:
+
+1. Local macOS OpenSSL 3.0.18: `openssl ciphers -v 'ALL@SECLEVEL=0'`
+   lists no RC4/3DES suites at all - they are not compiled into this
+   build, regardless of security level.
+2. Python's `ssl` module (same underlying system OpenSSL): same result,
+   `ctx.set_ciphers('RC4')` raises `No cipher can be selected`.
+3. A Debian Jessie (2016, OpenSSL 1.0.1t) container, run on the lab's
+   own `docker_lab-isolated` network as the TLS *client*, with real
+   RC4/3DES cipher suites available
+   (`openssl ciphers -v ALL | grep RC4` lists `RC4-SHA`,
+   `DES-CBC3-SHA`, etc.). Connecting to `securemailscope-lab-mail:587`
+   with `-cipher RC4-SHA` or `-cipher DES-CBC3-SHA` still fails with
+   `sslv3 alert handshake failure` - the lab **server** (Debian
+   bookworm, OpenSSL 3.0) doesn't support these ciphers either. Weak
+   cipher negotiation needs both sides to agree; getting a real capture
+   would require building an entirely separate legacy Postfix/Dovecot
+   image on an old base (itself complicated by Debian Jessie's own EOL
+   package repos requiring `archive.debian.org` and
+   `--allow-unauthenticated` just to install `openssl`), which was
+   judged out of scope for this "if time remains" item.

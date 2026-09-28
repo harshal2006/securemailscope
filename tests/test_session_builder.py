@@ -202,3 +202,18 @@ def no_sni_session():
 
 def test_no_sni_observed(no_sni_session):
     assert no_sni_session.tls_info.sni_hostname is None
+
+
+@pytest.fixture(scope="module")
+def tls1_0_session():
+    packets = read_packets(FIXTURES / "S27_smtp_587_tls1_0.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    return sessions[0]
+
+
+def test_tls1_0_negotiated_version_observed(tls1_0_session):
+    # Real client forced to TLS 1.0 via `openssl s_client -tls1
+    # -cipher DEFAULT@SECLEVEL=0` (local OpenSSL 3.0 refuses the
+    # legacy ServerKeyExchange sigalg at its default security level).
+    assert tls1_0_session.tls_info.negotiated_version == "TLS 1.0"

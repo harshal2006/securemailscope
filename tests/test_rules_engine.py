@@ -384,3 +384,11 @@ def test_real_no_sni_pcap_reports_not_evaluable_not_mismatch(rules):
     rule_ids = {f.rule_id for f in findings}
     assert "CERT_HOSTNAME_NOT_EVALUABLE" in rule_ids
     assert "CERT_HOSTNAME_MISMATCH" not in rule_ids
+
+
+def test_real_tls1_0_pcap_triggers_tls_version_1_0(rules):
+    session, analysis = _real_session_and_analysis("S27_smtp_587_tls1_0.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    version_finding = next(f for f in findings if f.rule_id == "TLS_VERSION_1_0")
+    assert version_finding.severity == "HIGH"
+    assert version_finding.plan_id == "P-02"
