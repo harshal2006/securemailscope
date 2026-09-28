@@ -48,7 +48,24 @@ def load_rules() -> dict:
         "mode": _load_yaml("mode_rules.yaml"),
         "weak_ciphers": _load_yaml("weak_ciphers.yaml"),
         "starttls": _load_yaml("starttls_rules.yaml"),
+        "forward_secrecy": _load_yaml("forward_secrecy.yaml"),
     }
+
+
+def _classify_key_exchange(negotiated_version: str | None, cipher_suite: str | None, rules: dict) -> str:
+    """Returns 'ephemeral', 'static', or 'unknown' (never guessed)."""
+    if negotiated_version == "TLS 1.3":
+        # TLS 1.3 has no static-RSA-style key exchange; key_share is
+        # always ephemeral, regardless of which suite is negotiated.
+        return "ephemeral"
+    if cipher_suite is None:
+        return "unknown"
+    fs_rules = rules["forward_secrecy"]
+    if cipher_suite in fs_rules["ephemeral_suites"]:
+        return "ephemeral"
+    if cipher_suite in fs_rules["static_suites"]:
+        return "static"
+    return "unknown"
 
 
 def _finding(rule_meta: dict, rule_id: str, session: Session, message: str | None = None) -> Finding:
@@ -101,6 +118,13 @@ def evaluate_session(
                     message=f"{weak_ciphers['message']} ({tls_info.cipher_suite}: {weak_reason})",
                 )
             )
+
+    kex = _classify_key_exchange(tls_info.negotiated_version, tls_info.cipher_suite, rules)
+    fs_rules = rules["forward_secrecy"]
+    if kex == "static":
+        findings.append(_finding(fs_rules, fs_rules["rule_id"], session))
+    elif kex == "unknown":
+        findings.append(_finding(fs_rules["not_evaluable"], "FORWARD_SECRECY_NOT_EVALUABLE", session))
 
     if tls_info.cert_observable:
         cert = tls_info.leaf_cert

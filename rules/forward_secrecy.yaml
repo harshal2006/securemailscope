@@ -1,0 +1,68 @@
+# C-05: forward secrecy. A session has forward secrecy if the key
+# exchange is ephemeral (ECDHE, DHE) rather than static (plain RSA
+# key transport, or static DH/ECDH). TLS 1.3 is always ephemeral via
+# the key_share mechanism and is never encrypted with a static-RSA-style
+# exchange, so it's classified as ephemeral in code without consulting
+# this table.
+#
+# `ephemeral_suites`/`static_suites` classify TLS <= 1.2 cipher suites by
+# their key exchange, from the suite name (IANA TLS Cipher Suite
+# Registry): *_ECDHE_*/*_DHE_* = ephemeral, plain *_RSA_WITH_*
+# (no DHE/ECDHE) = static RSA key transport. This list is NOT
+# exhaustive - it only covers suites reasonably likely to appear in
+# practice (including every suite observed in our own real captures).
+# A suite not in either list is reported as not evaluable, never guessed.
+
+rule_id: NO_FORWARD_SECRECY
+id: C-05
+severity: MEDIUM
+score_impact: 15
+message: "Negotiated cipher suite does not provide forward secrecy (static RSA/DH key exchange)."
+
+not_evaluable:
+  severity: INFO
+  score_impact: 0
+  message: "Cipher suite not in our key-exchange classification table; forward secrecy not evaluable (not guessed)."
+
+ephemeral_suites:
+  # ECDHE_RSA / ECDHE_ECDSA (observed in our real captures: 0xc030, 0xc014)
+  - "0xc007"
+  - "0xc008"
+  - "0xc009"
+  - "0xc00a"
+  - "0xc011"
+  - "0xc012"
+  - "0xc013"
+  - "0xc014"
+  - "0xc023"
+  - "0xc024"
+  - "0xc027"
+  - "0xc028"
+  - "0xc02b"
+  - "0xc02c"
+  - "0xc02f"
+  - "0xc030"
+  - "0xcca8"
+  - "0xcca9"
+  # DHE_RSA
+  - "0x0033"
+  - "0x0039"
+  - "0x0067"
+  - "0x006b"
+  - "0x009e"
+  - "0x009f"
+  - "0xccaa"
+
+static_suites:
+  # Plain RSA key transport (no DHE/ECDHE) - includes suites already
+  # flagged weak by rules/weak_ciphers.yaml (RC4, 3DES); a session can
+  # correctly be flagged for both independently.
+  - "0x0004"
+  - "0x0005"
+  - "0x000a"
+  - "0x002f"
+  - "0x0035"
+  - "0x003c"
+  - "0x003d"
+  - "0x009c"
+  - "0x009d"

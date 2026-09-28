@@ -139,8 +139,9 @@ test coverage in `tests/`, not theoretical code-path sharing - e.g.
 | `TLS_VERSION_1_2` | P-03 | TLS 1.2 negotiated | LOW | y | y |
 | `TLS_VERSION_1_3` | | TLS 1.3 negotiated | INFO | y | y |
 | `WEAK_CIPHER_SUITE` | C-02 | NULL/RC4/3DES/anon-DH cipher | HIGH | n | y |
-| — (not implemented) | C-03 | No forward secrecy | — | n | n |
-| — (not implemented) | C-05 | Weak DH parameters | — | n | n |
+| — (not implemented) | C-03 | Weak DH parameters (<=1024 bits) | — | n | n |
+| `NO_FORWARD_SECRECY` | C-05 | Static RSA/DH key exchange (no forward secrecy) | MEDIUM | n* | y |
+| `FORWARD_SECRECY_NOT_EVALUABLE` | | Cipher suite not in our kex classification table | INFO | n | y |
 | `CERT_EXPIRED` | X-01 | Certificate expired | HIGH | y | y |
 | `CERT_SELF_SIGNED` | X-03 | Certificate self-signed | MEDIUM | y | y |
 | `CERT_WEAK_KEY` | X-06 | RSA/DSA key < 2048 bits | HIGH | y | y |
@@ -151,6 +152,12 @@ test coverage in `tests/`, not theoretical code-path sharing - e.g.
 | `T-01` | T-01 | Plaintext AUTH before TLS | CRITICAL | y | y |
 | `T-02` | T-02 | STARTTLS advertised but unused | HIGH (submission) / INFO (mx) | y | y |
 | `T-03` | T-03 | STARTTLS not offered at all | HIGH (submission) / LOW (mx) | y | y |
+
+\* `NO_FORWARD_SECRECY` itself has never fired on a real capture - every
+real session we have negotiated an ephemeral suite (ECDHE or TLS 1.3),
+confirmed by checking each fixture's cipher_suite. The *absence* of the
+finding (has-forward-secrecy path) IS confirmed on real captures; the
+finding *firing* (static kex) is synthetic-only.
 
 ## Verified vs not yet verified
 
@@ -265,6 +272,21 @@ objects in unit tests, not real pcaps):
   (`core/starttls.py`). Confirmed with `tshark`/`strings` that
   credentials never leak in either the wire capture (STARTTLS/STLS
   cases) or the tool's own output (all cases, via redaction).
+- `NO_FORWARD_SECRECY` (C-05): every real capture we have negotiated an
+  ephemeral cipher suite (ECDHE on TLS <= 1.2, or TLS 1.3, which is
+  always ephemeral), confirmed by checking each fixture's negotiated
+  `cipher_suite`. The *absence* of the finding is real-verified; the
+  finding itself firing (static RSA/DH key exchange) is
+  synthetic-only - no real capture with a static-kex suite exists.
+
+**Not implemented: `C-03`** (weak DH parameters, <=1024 bits). Checked
+feasibility first: tshark's TLS dissector does expose
+`tls.handshake.p_len` (the DH prime length) for classic (non-EC)
+ServerKeyExchange messages, but we don't currently parse
+ServerKeyExchange at all - only ClientHello, ServerHello, and
+Certificate. Implementing this would mean new field extraction and new
+session_builder parsing logic, not just reading data we already have.
+Flagged to the user rather than built.
 
 **Not built:** report rendering (HTML/PDF), a web UI or dashboard, an
 API, and any ML-based scoring or anomaly detection. Out of scope for this

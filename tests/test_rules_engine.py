@@ -427,3 +427,61 @@ def test_real_pop3_stls_userpass_triggers_neither_t01_nor_t02(rules):
     rule_ids = {f.rule_id for f in findings}
     assert "T-01" not in rule_ids
     assert "T-02" not in rule_ids
+
+
+# --- C-05: forward secrecy ---
+#
+# None of our real captures negotiated a static-RSA/DH cipher suite (our
+# lab server's OpenSSL only offers ECDHE by default for TLS <= 1.2, and
+# TLS 1.3 is always ephemeral) - confirmed by checking every fixture's
+# negotiated cipher_suite. So the "no forward secrecy" (static kex) path
+# is only tested synthetically below; the "has forward secrecy"
+# (ephemeral) path IS confirmed on multiple real captures.
+
+
+def test_real_tls12_ecdhe_captures_have_forward_secrecy(rules):
+    # 0xc030 (ECDHE_RSA_AES256_GCM_SHA384) appears in every real TLS 1.2
+    # capture we have (S18, S19, S22, S23, S24, S25, S29, S31, etc).
+    session, analysis = _real_session_and_analysis(
+        "S18_smtp_587_starttls_expired_cert.pcap"
+    )
+    assert session.tls_info.cipher_suite == "0xc030"
+    findings = evaluate_session(session, rules, analysis)
+    rule_ids = {f.rule_id for f in findings}
+    assert "NO_FORWARD_SECRECY" not in rule_ids
+    assert "FORWARD_SECRECY_NOT_EVALUABLE" not in rule_ids
+
+
+def test_real_tls13_capture_has_forward_secrecy(rules):
+    # TLS 1.3 is always ephemeral via key_share, classified in code
+    # without consulting the cipher suite table at all.
+    session, analysis = _real_session_and_analysis("S01b_smtp_587_starttls_auth.pcap")
+    assert session.tls_info.negotiated_version == "TLS 1.3"
+    findings = evaluate_session(session, rules, analysis)
+    assert not any(f.rule_id == "NO_FORWARD_SECRECY" for f in findings)
+
+
+def test_static_rsa_kex_flagged_no_forward_secrecy(rules):
+    # 0x009c = TLS_RSA_WITH_AES_128_GCM_SHA256 (plain RSA key transport).
+    tls_info = _tls_info(cipher_suite="0x009c")
+    findings = evaluate_session(_session(tls_info=tls_info), rules)
+    finding = next(f for f in findings if f.rule_id == "NO_FORWARD_SECRECY")
+    assert finding.severity == "MEDIUM"
+    assert finding.plan_id == "C-05"
+
+
+def test_dhe_kex_not_flagged(rules):
+    # 0x0067 = TLS_DHE_RSA_WITH_AES_128_CBC_SHA256 (ephemeral DH).
+    tls_info = _tls_info(cipher_suite="0x0067")
+    findings = evaluate_session(_session(tls_info=tls_info), rules)
+    assert not any(f.rule_id == "NO_FORWARD_SECRECY" for f in findings)
+
+
+def test_unrecognized_cipher_suite_reports_not_evaluable_not_guessed(rules):
+    tls_info = _tls_info(cipher_suite="0xdead")  # not a real/known suite
+    findings = evaluate_session(_session(tls_info=tls_info), rules)
+    rule_ids = {f.rule_id for f in findings}
+    assert "FORWARD_SECRECY_NOT_EVALUABLE" in rule_ids
+    assert "NO_FORWARD_SECRECY" not in rule_ids
+    not_evaluable = next(f for f in findings if f.rule_id == "FORWARD_SECRECY_NOT_EVALUABLE")
+    assert not_evaluable.severity == "INFO"
