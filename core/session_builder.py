@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from collections import defaultdict
 from pathlib import Path
 
@@ -146,6 +147,7 @@ def _extract_tls_info(pkts: list[dict[str, str]]) -> TLSInfo:
     negotiated_version_code = None
     cipher_suite_code = None
     cert_hex_list = None
+    cert_frame_time_epoch = None
 
     for pkt in pkts:
         handshake_types = (pkt.get("tls.handshake.type") or "").split(",")
@@ -161,11 +163,21 @@ def _extract_tls_info(pkts: list[dict[str, str]]) -> TLSInfo:
             cipher_suite_code = _first_hex_value(pkt.get("tls.handshake.ciphersuite"))
         if TLS_HANDSHAKE_CERTIFICATE in handshake_types and pkt.get("tls.handshake.certificate"):
             cert_hex_list = pkt["tls.handshake.certificate"]
+            cert_frame_time_epoch = pkt.get("frame.time_epoch")
 
     negotiated_version = TLS_VERSION_NAMES.get(negotiated_version_code)
     cipher_suite = f"0x{cipher_suite_code:04x}" if cipher_suite_code is not None else None
 
-    certs = parse_hex_cert_list(cert_hex_list) if cert_hex_list else []
+    # Certificate validity must be judged against when the traffic was
+    # actually captured, not whenever this analysis happens to run - a
+    # pcap analyzed long after capture must not have its cert expiry
+    # flip based on wall-clock time. See core/cert_parser.py.
+    capture_time = None
+    if cert_frame_time_epoch:
+        capture_time = datetime.datetime.fromtimestamp(
+            float(cert_frame_time_epoch), tz=datetime.timezone.utc
+        )
+    certs = parse_hex_cert_list(cert_hex_list, capture_time) if cert_hex_list else []
     leaf_cert = certs[0] if certs else None
     chain_certs = certs[1:] if len(certs) > 1 else []
 

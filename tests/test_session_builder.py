@@ -1,3 +1,4 @@
+import datetime
 from pathlib import Path
 
 import pytest
@@ -118,6 +119,24 @@ def selfsigned_cert_session():
     sessions = build_sessions(packets)
     assert len(sessions) == 1
     return sessions[0]
+
+
+def test_cert_expiry_uses_capture_time_not_wall_clock():
+    # Regression test for a real bug: cert expiry was judged against
+    # datetime.now() (when the analyzer runs) instead of the pcap's own
+    # capture timestamp. This fixture's cert was valid from
+    # 2026-09-28T18:45:58Z to 2026-09-28T18:47:58Z, and was captured at
+    # 2026-09-28T18:46:43Z - inside that window. Wall-clock time is now
+    # (and will permanently remain) past notAfter, so a wall-clock-based
+    # implementation would incorrectly report this cert as expired
+    # whenever the test suite runs; the capture-time-based fix must
+    # always report it as not expired, regardless of when the test runs.
+    packets = read_packets(FIXTURES / "S20_smtp_587_shortlived_cert.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    cert = sessions[0].tls_info.leaf_cert
+    assert cert.not_after < datetime.datetime.now(datetime.timezone.utc)  # sanity check
+    assert cert.is_expired is False
 
 
 def test_selfsigned_cert_is_observed_and_flagged(selfsigned_cert_session):

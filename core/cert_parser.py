@@ -23,8 +23,19 @@ def _key_algorithm_and_size(public_key) -> tuple[str, int | None]:
     return type(public_key).__name__, None
 
 
-def parse_der_certificate(der_bytes: bytes) -> CertInfo:
-    """Parse a single DER-encoded certificate as captured on the wire."""
+def parse_der_certificate(
+    der_bytes: bytes, reference_time: datetime.datetime | None = None
+) -> CertInfo:
+    """Parse a single DER-encoded certificate as captured on the wire.
+
+    `reference_time` should be the pcap's own capture timestamp (from
+    tshark's frame.time_epoch), not wall-clock time - this is a passive
+    forensic tool that may analyze pcaps long after capture, and a cert
+    valid at capture time but since expired (or vice versa) must be
+    judged against the capture time, not whenever the analyzer happens
+    to run. Defaults to wall-clock `now` only for standalone use (e.g.
+    inspecting a cert file directly, not from a capture).
+    """
     cert = x509.load_der_x509_certificate(der_bytes)
 
     subject_cn = _get_common_name(cert.subject)
@@ -44,7 +55,8 @@ def parse_der_certificate(der_bytes: bytes) -> CertInfo:
     except x509.ExtensionNotFound:
         pass
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    if reference_time is None:
+        reference_time = datetime.datetime.now(datetime.timezone.utc)
     not_before = cert.not_valid_before_utc
     not_after = cert.not_valid_after_utc
 
@@ -58,7 +70,7 @@ def parse_der_certificate(der_bytes: bytes) -> CertInfo:
         san_dns_names=san_dns_names,
         not_before=not_before,
         not_after=not_after,
-        is_expired=not (not_before <= now <= not_after),
+        is_expired=not (not_before <= reference_time <= not_after),
     )
 
 
@@ -67,7 +79,9 @@ def _get_common_name(name: x509.Name) -> str | None:
     return attrs[0].value if attrs else None
 
 
-def parse_hex_cert_list(hex_list: str) -> list[CertInfo]:
+def parse_hex_cert_list(
+    hex_list: str, reference_time: datetime.datetime | None = None
+) -> list[CertInfo]:
     """Parse tshark's comma-separated tls.handshake.certificate hex field."""
     if not hex_list:
         return []
@@ -76,5 +90,5 @@ def parse_hex_cert_list(hex_list: str) -> list[CertInfo]:
         hex_der = hex_der.strip()
         if not hex_der:
             continue
-        certs.append(parse_der_certificate(bytes.fromhex(hex_der)))
+        certs.append(parse_der_certificate(bytes.fromhex(hex_der), reference_time))
     return certs

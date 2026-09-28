@@ -45,3 +45,19 @@ def test_parse_selfsigned_cert():
     info = parse_der_certificate(_der_bytes("selfsigned.crt"))
     assert info.self_signed is True
     assert info.subject_cn == info.issuer_cn == "mail.lab.test"
+
+
+def test_expiry_uses_reference_time_not_wall_clock():
+    # expired.crt: notBefore 2024-09-28, notAfter 2025-09-28. Wall clock
+    # is now well past that, so the default (no reference_time) call
+    # must say expired...
+    default_info = parse_der_certificate(_der_bytes("expired.crt"))
+    assert default_info.is_expired is True
+
+    # ...but if we pass a reference_time from back when the cert was
+    # still valid (simulating a pcap captured then), it must not be
+    # judged expired - expiry is relative to the capture, not to
+    # whenever parse_der_certificate happens to be called.
+    reference_time = datetime.datetime(2025, 1, 1, tzinfo=datetime.timezone.utc)
+    past_info = parse_der_certificate(_der_bytes("expired.crt"), reference_time)
+    assert past_info.is_expired is False
