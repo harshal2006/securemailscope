@@ -18,6 +18,12 @@ _AUTH_COMMAND_RE = re.compile(
 REDACTED = "[REDACTED]"
 
 
+def is_auth_continuation_line(line: str) -> bool:
+    """True if `line` looks like a bare base64 AUTH continuation (the
+    username/password sent after a bare `AUTH LOGIN`/`AUTH PLAIN`)."""
+    return bool(_AUTH_CONTINUATION_RE.match(line.strip()))
+
+
 def redact_line(line: str) -> str:
     """Redact a single protocol line if it looks like it carries a credential."""
     stripped = line.strip()

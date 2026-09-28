@@ -14,6 +14,7 @@ import yaml
 
 from core.findings import Finding
 from core.models import Session
+from core.starttls import StarttlsAnalysis
 
 RULES_DIR = Path(__file__).parent.parent / "rules"
 
@@ -32,6 +33,7 @@ def load_rules() -> dict:
         "cert": _load_yaml("cert_rules.yaml"),
         "mode": _load_yaml("mode_rules.yaml"),
         "weak_ciphers": _load_yaml("weak_ciphers.yaml"),
+        "starttls": _load_yaml("starttls_rules.yaml"),
     }
 
 
@@ -47,11 +49,16 @@ def _finding(rule_meta: dict, rule_id: str, session: Session, message: str | Non
     )
 
 
-def evaluate_session(session: Session, rules: dict | None = None) -> list[Finding]:
+def evaluate_session(
+    session: Session,
+    rules: dict | None = None,
+    starttls_analysis: StarttlsAnalysis | None = None,
+) -> list[Finding]:
     if rules is None:
         rules = load_rules()
 
     findings: list[Finding] = []
+    findings.extend(_evaluate_starttls_rules(session, starttls_analysis, rules))
 
     if session.tls_mode == "plaintext_only":
         mode_rule = rules["mode"]["NO_TLS_OBSERVED"]
@@ -111,5 +118,45 @@ def evaluate_session(session: Session, rules: dict | None = None) -> list[Findin
                 message=tls_info.cert_not_observable_reason,
             )
         )
+
+    return findings
+
+
+def _finding_by_role(rule_meta: dict, rule_id: str, session: Session) -> Finding:
+    role_meta = rule_meta["by_role"][session.role]
+    return Finding(
+        rule_id=rule_id,
+        severity=role_meta["severity"],
+        score_impact=role_meta["score_impact"],
+        message=rule_meta["message"],
+        tcp_stream=session.tcp_stream,
+        protocol=session.protocol,
+        server_port=session.server_port,
+    )
+
+
+def _evaluate_starttls_rules(
+    session: Session, starttls_analysis: StarttlsAnalysis | None, rules: dict
+) -> list[Finding]:
+    findings: list[Finding] = []
+    if starttls_analysis is None or session.tls_mode == "implicit":
+        # T-01/T-02/T-03 only apply to STARTTLS-capable (plaintext-first)
+        # ports; implicit-TLS sessions are encrypted from byte one, so
+        # there is no plaintext-exposure window to evaluate.
+        return findings
+
+    starttls_rules = rules["starttls"]
+
+    if starttls_analysis.auth_before_tls:
+        findings.append(_finding(starttls_rules["T-01"], "T-01", session))
+
+    if (
+        session.tls_mode == "plaintext_only"
+        and starttls_analysis.capability_advertised_starttls is True
+    ):
+        findings.append(_finding_by_role(starttls_rules["T-02"], "T-02", session))
+
+    if starttls_analysis.capability_advertised_starttls is False:
+        findings.append(_finding_by_role(starttls_rules["T-03"], "T-03", session))
 
     return findings

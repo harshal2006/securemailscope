@@ -52,6 +52,7 @@ class Session:
     tcp_stream: int
     protocol: str  # "smtp" | "imap" | "pop3"
     tls_mode: str  # "implicit" | "starttls" | "plaintext_only"
+    role: str  # "mx" | "submission"
     client_ip: str
     server_ip: str
     server_port: int

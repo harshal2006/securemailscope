@@ -1,0 +1,36 @@
+# STARTTLS / plaintext-auth rule metadata. Matching logic lives in
+# core/rules_engine.py (using core/starttls.py's StarttlsAnalysis).
+#
+# T-02 and T-03 are role-aware: on port 25 (mx, server-to-server),
+# opportunistic TLS is normal internet behavior and a client/relay
+# staying plaintext, or a server not offering STARTTLS, is common and
+# far less severe than the same situation on a client-facing submission
+# port (587/143/110), where users' real credentials are on the line.
+
+T-01:
+  rule_id: T-01
+  severity: CRITICAL
+  score_impact: 60
+  message: "Plaintext authentication (AUTH/USER/PASS) observed before TLS was established."
+
+T-02:
+  rule_id: T-02
+  by_role:
+    mx:
+      severity: INFO
+      score_impact: 0
+    submission:
+      severity: HIGH
+      score_impact: 30
+  message: "STARTTLS was advertised by the server but the client did not upgrade to TLS."
+
+T-03:
+  rule_id: T-03
+  by_role:
+    mx:
+      severity: LOW
+      score_impact: 5
+    submission:
+      severity: HIGH
+      score_impact: 35
+  message: "STARTTLS/STLS was not offered by the server on this port."

@@ -21,6 +21,7 @@ FIELDS = [
     "tcp.srcport",
     "tcp.dstport",
     "tcp.len",
+    "tcp.payload",
     "tls.record.content_type",
     "tls.handshake.type",
     "tls.handshake.version",

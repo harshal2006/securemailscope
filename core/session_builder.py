@@ -21,14 +21,26 @@ def load_port_map(ports_file: Path = DEFAULT_PORTS_FILE) -> dict[str, dict[str, 
         return yaml.safe_load(f)
 
 
-def _classify_port(port: int, port_map: dict) -> tuple[str, str] | None:
-    """Return (protocol, 'starttls'|'implicit') if port is known, else None."""
+def _classify_port(port: int, port_map: dict) -> tuple[str, str, str] | None:
+    """Return (protocol, 'starttls'|'implicit', role) if port is known, else None."""
     for protocol, modes in port_map.items():
-        if port in modes.get("starttls_ports", []):
-            return protocol, "starttls"
-        if port in modes.get("implicit_ports", []):
-            return protocol, "implicit"
+        for mode_key, roles in (("starttls_ports", "starttls"), ("implicit_ports", "implicit")):
+            for role, ports in modes.get(mode_key, {}).items():
+                if port in ports:
+                    return protocol, roles, role
     return None
+
+
+def group_packets_by_stream(packets: list[dict[str, str]]) -> dict[int, list[dict[str, str]]]:
+    by_stream: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for pkt in packets:
+        stream = pkt.get("tcp.stream")
+        if stream:
+            by_stream[stream].append(pkt)
+    return {
+        int(stream_id): sorted(pkts, key=lambda p: int(p["frame.number"]))
+        for stream_id, pkts in by_stream.items()
+    }
 
 
 def _int_or_none(value: str) -> int | None:
@@ -59,16 +71,11 @@ def build_sessions(
     if port_map is None:
         port_map = load_port_map()
 
-    by_stream: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for pkt in packets:
-        stream = pkt.get("tcp.stream")
-        if stream:
-            by_stream[stream].append(pkt)
+    by_stream = group_packets_by_stream(packets)
 
     sessions: list[Session] = []
     for stream_id, pkts in by_stream.items():
-        pkts.sort(key=lambda p: int(p["frame.number"]))
-        session = _build_one_session(int(stream_id), pkts, port_map)
+        session = _build_one_session(stream_id, pkts, port_map)
         if session is not None:
             sessions.append(session)
     return sessions
@@ -100,7 +107,7 @@ def _build_one_session(
 
     if classification is None:
         return None  # not a mail protocol session we recognize
-    protocol, expected_mode = classification
+    protocol, _expected_mode, role = classification
 
     first_payload_pkt = next(
         (p for p in pkts if _int_or_none(p.get("tcp.len")) and int(p["tcp.len"]) > 0), None
@@ -125,6 +132,7 @@ def _build_one_session(
         tcp_stream=stream_id,
         protocol=protocol,
         tls_mode=tls_mode,
+        role=role,
         client_ip=client_ip,
         server_ip=server_ip,
         server_port=server_port,
