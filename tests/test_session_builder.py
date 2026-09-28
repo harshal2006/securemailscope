@@ -148,3 +148,31 @@ def test_selfsigned_cert_is_observed_and_flagged(selfsigned_cert_session):
     assert cert.self_signed is True
     assert cert.issuer_cn == cert.subject_cn
     assert cert.is_expired is False
+
+
+@pytest.fixture(scope="module")
+def rsa1024_cert_session():
+    packets = read_packets(FIXTURES / "S23_smtp_587_rsa1024_cert.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    return sessions[0]
+
+
+def test_rsa1024_cert_key_size_observed(rsa1024_cert_session):
+    cert = rsa1024_cert_session.tls_info.leaf_cert
+    assert cert.key_algorithm == "RSA"
+    assert cert.key_size == 1024
+
+
+@pytest.fixture(scope="module")
+def sha1_cert_session():
+    packets = read_packets(FIXTURES / "S22_smtp_587_sha1_signed_cert.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    return sessions[0]
+
+
+def test_sha1_cert_signature_hash_observed(sha1_cert_session):
+    cert = sha1_cert_session.tls_info.leaf_cert
+    assert cert.signature_hash_algorithm == "sha1"
+    assert cert.key_size == 2048  # only the signature hash is weak here

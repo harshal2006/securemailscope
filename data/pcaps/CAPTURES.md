@@ -131,3 +131,44 @@ agnostic, same as S17) but `T-02` as INFO (vs. HIGH on S17's submission
 port), confirming the mx/submission role split works on real captures,
 not just synthetic `Session` objects. Contains the same intentional
 cleartext dummy AUTH LOGIN exchange as S17.
+
+## S22 — `S22_smtp_587_sha1_signed_cert.pcap`
+
+STARTTLS SMTP on port 587 where the server presents a certificate signed
+with SHA-1 instead of SHA-256.
+
+`lab/gen_certs.py`'s `cryptography`-based signer refuses SHA-1 at the API
+level (`UnsupportedAlgorithm`), so this cert was built with the `openssl`
+CLI directly instead, chained to the lab CA with the correct SAN:
+
+```
+openssl genrsa -out leaf.key 2048
+openssl req -new -key leaf.key -out leaf.csr -subj "/CN=mail.lab.test" \
+        -config san.cnf -extensions v3_req   # san.cnf: subjectAltName=DNS:mail.lab.test
+openssl x509 -req -in leaf.csr -CA lab/certs/ca.crt -CAkey lab/certs/ca.key \
+        -CAcreateserial -out leaf.crt -days 365 -sha1 \
+        -extfile san.cnf -extensions v3_req
+```
+
+Swapped in as `valid.crt`/`valid.key`, captured with `openssl s_client
+-tls1_2` (same as S18/S19), restored immediately after.
+
+**Verified independently of the analyzer:** `openssl s_client` reported
+`Verify return code: 68 (CA signature digest algorithm too weak)` and
+`Signature Algorithm: sha1WithRSAEncryption` in the leaf cert text.
+
+**Then ran the analyzer**: reported `sig=sha1`, fired `[HIGH]
+CERT_WEAK_SIGNATURE_HASH (X-07)`, session score 70/100.
+
+## S23 — `S23_smtp_587_rsa1024_cert.pcap`
+
+Same procedure, using an RSA-1024 leaf cert generated via
+`lab/gen_certs.py`'s `build_leaf(ca_key, ca_cert, key_size=1024)` (this
+one `cryptography` allows - only the signature hash restriction blocks
+SHA-1).
+
+**Verified independently:** `openssl s_client` reported `Server public
+key is 1024 bit` and completed the TLSv1.2 handshake.
+
+**Then ran the analyzer**: reported `RSA-1024`, fired `[HIGH]
+CERT_WEAK_KEY (X-06)`, session score 70/100.

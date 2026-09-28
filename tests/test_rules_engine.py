@@ -310,3 +310,19 @@ def test_real_selfsigned_cert_pcap_triggers_cert_self_signed(rules):
     ss_finding = next(f for f in findings if f.rule_id == "CERT_SELF_SIGNED")
     assert ss_finding.severity == "MEDIUM"
     assert not any(f.rule_id == "CERT_EXPIRED" for f in findings)
+
+
+def test_real_rsa1024_cert_pcap_triggers_cert_weak_key(rules):
+    session, analysis = _real_session_and_analysis("S23_smtp_587_rsa1024_cert.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    weak_key = next(f for f in findings if f.rule_id == "CERT_WEAK_KEY")
+    assert weak_key.severity == "HIGH"
+    assert weak_key.plan_id == "X-06"
+
+
+def test_real_sha1_cert_pcap_triggers_cert_weak_signature_hash(rules):
+    session, analysis = _real_session_and_analysis("S22_smtp_587_sha1_signed_cert.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    weak_hash = next(f for f in findings if f.rule_id == "CERT_WEAK_SIGNATURE_HASH")
+    assert weak_hash.severity == "HIGH"
+    assert weak_hash.plan_id == "X-07"

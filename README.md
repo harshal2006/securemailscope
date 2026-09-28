@@ -139,8 +139,8 @@ test coverage in `tests/`, not theoretical code-path sharing - e.g.
 | `CERT_EXPIRED` | X-01 | Certificate expired | HIGH | y | y |
 | `CERT_SELF_SIGNED` | X-03 | Certificate self-signed | MEDIUM | y | y |
 | — (not implemented) | X-05 | Certificate hostname/SAN mismatch | — | n | n |
-| `CERT_WEAK_KEY` | X-06 | RSA/DSA key < 2048 bits | HIGH | n | y |
-| `CERT_WEAK_SIGNATURE_HASH` | X-07 | MD5/SHA-1 signature | HIGH | n | y |
+| `CERT_WEAK_KEY` | X-06 | RSA/DSA key < 2048 bits | HIGH | y | y |
+| `CERT_WEAK_SIGNATURE_HASH` | X-07 | MD5/SHA-1 signature | HIGH | y | y |
 | `CERT_NOT_OBSERVABLE` | | Cert not observable (TLS 1.3, etc.) | INFO | y | y |
 | `T-01` | T-01 | Plaintext AUTH before TLS | CRITICAL | y | y |
 | `T-02` | T-02 | STARTTLS advertised but unused | HIGH (submission) / INFO (mx) | y | y |
@@ -184,12 +184,18 @@ is theoretically capable of.
   port 587 (submission, fires HIGH) and port 25 (mx, fires INFO) and
   confirmed both with the analyzer.
 
+- Weak-key (RSA-1024) and weak-signature-hash (SHA-1) certificate
+  findings: `cryptography` refuses to sign with SHA-1 at the API level,
+  so the SHA-1 cert was built with the `openssl` CLI directly (chained
+  to the lab CA, correct SAN) instead of `lab/gen_certs.py`. `openssl
+  s_client` independently confirmed `Verify return code: 68 (CA
+  signature digest algorithm too weak)` and `Server public key is 1024
+  bit` respectively, before the analyzer correctly fired
+  `CERT_WEAK_SIGNATURE_HASH` and `CERT_WEAK_KEY`.
+
 **Not yet verified against real captures** (implemented, but only
 exercised with synthetic `Session`/`TLSInfo`/`CertInfo`/`StarttlsAnalysis`
 objects in unit tests, not real pcaps):
-- Weak-key (RSA-1024) and weak-signature-hash (SHA-1) certificate
-  findings - `lab/gen_certs.py` supports generating these via flags, but
-  no real capture against them has been made yet.
 - Weak cipher suite findings (RC4/3DES/NULL/anonymous-DH) - the lab
   server's OpenSSL only negotiates modern ciphers by default, and no
   legacy-cipher lab config has been built.
