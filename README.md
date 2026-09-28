@@ -116,6 +116,36 @@ A session's score is 100 minus the sum of its findings' score impact,
 floored at 0. The overall posture score for a capture is the minimum
 across its sessions.
 
+## Rule coverage
+
+Plan ID is the hackathon plan's own rule numbering, where one has been
+confirmed; a blank means no plan ID applies (informational finding) or
+the rule isn't implemented yet. "Real pcap" / "Synthetic" reflect actual
+test coverage in `tests/`, not theoretical code-path sharing - e.g.
+`TLS_VERSION_1_1` shares its matching code with `TLS_VERSION_1_0`, which
+*is* tested, but has no test of its own, so it's marked untested here.
+
+| Rule ID | Plan ID | Name | Severity | Real pcap | Synthetic |
+|---|---|---|---|---|---|
+| `NO_TLS_OBSERVED` | | No TLS/STARTTLS observed at all | CRITICAL | y | y |
+| `TLS_VERSION_SSL3` | P-02 | SSLv3 negotiated | CRITICAL | n | n |
+| `TLS_VERSION_1_0` | P-02 | TLS 1.0 negotiated | HIGH | n | y |
+| `TLS_VERSION_1_1` | P-02 | TLS 1.1 negotiated | HIGH | n | n |
+| `TLS_VERSION_1_2` | P-03 | TLS 1.2 negotiated | LOW | y | y |
+| `TLS_VERSION_1_3` | | TLS 1.3 negotiated | INFO | y | y |
+| `WEAK_CIPHER_SUITE` | C-02 | NULL/RC4/3DES/anon-DH cipher | HIGH | n | y |
+| — (not implemented) | C-03 | No forward secrecy | — | n | n |
+| — (not implemented) | C-05 | Weak DH parameters | — | n | n |
+| `CERT_EXPIRED` | X-01 | Certificate expired | HIGH | y | y |
+| `CERT_SELF_SIGNED` | X-03 | Certificate self-signed | MEDIUM | y | y |
+| — (not implemented) | X-05 | Certificate hostname/SAN mismatch | — | n | n |
+| `CERT_WEAK_KEY` | X-06 | RSA/DSA key < 2048 bits | HIGH | n | y |
+| `CERT_WEAK_SIGNATURE_HASH` | X-07 | MD5/SHA-1 signature | HIGH | n | y |
+| `CERT_NOT_OBSERVABLE` | | Cert not observable (TLS 1.3, etc.) | INFO | y | y |
+| `T-01` | T-01 | Plaintext AUTH before TLS | CRITICAL | y | y |
+| `T-02` | T-02 | STARTTLS advertised but unused | HIGH (submission) / INFO (mx) | y | y |
+| `T-03` | T-03 | STARTTLS not offered at all | HIGH (submission) / LOW (mx) | n | y |
+
 ## Verified vs not yet verified
 
 This reflects what has actually been run and checked, not what the code
@@ -142,6 +172,17 @@ is theoretically capable of.
   `tshark` (decoded the wire cert's ASN.1 `notAfter`) before running the
   analyzer, which correctly fired `CERT_EXPIRED` (HIGH, score 65) and
   `CERT_SELF_SIGNED` (MEDIUM, score 80) respectively.
+- Certificate expiry uses the pcap's own capture timestamp, not the
+  analyzer's wall-clock time: captured a real session against a cert
+  valid for ~2 minutes, then waited for wall-clock time to pass its
+  `notAfter` before running the analyzer. It correctly reported
+  `expired=False` (using capture time), while explicitly re-checking the
+  same cert against `datetime.now()` confirms a wall-clock-based
+  implementation would have wrongly said `True`.
+- `T-02`'s role-aware downgrade (HIGH on submission, INFO on mx):
+  captured the same plaintext-AUTH-without-STARTTLS scenario on both
+  port 587 (submission, fires HIGH) and port 25 (mx, fires INFO) and
+  confirmed both with the analyzer.
 
 **Not yet verified against real captures** (implemented, but only
 exercised with synthetic `Session`/`TLSInfo`/`CertInfo`/`StarttlsAnalysis`
@@ -152,12 +193,16 @@ objects in unit tests, not real pcaps):
 - Weak cipher suite findings (RC4/3DES/NULL/anonymous-DH) - the lab
   server's OpenSSL only negotiates modern ciphers by default, and no
   legacy-cipher lab config has been built.
+- `SSL 3.0` and `TLS 1.1` findings - no test at all, real or synthetic,
+  exercises these two specifically (only TLS 1.0/1.2/1.3 have dedicated
+  tests), even though the matching code path is shared.
 - `T-03` ("STARTTLS not offered") - the lab server always advertises
   STARTTLS; producing a real negative would need a second lab
   configuration with STARTTLS disabled.
 - IMAP/POP3 STARTTLS timeline parsing (capability detection, STLS) -
   implemented with the same logic as SMTP, but no real IMAP/POP3
   plaintext-auth pcap has been captured, only SMTP.
+- `X-05` (certificate hostname/SAN mismatch) - not implemented yet.
 
 **Not built:** report rendering (HTML/PDF), a web UI or dashboard, an
 API, and any ML-based scoring or anomaly detection. Out of scope for this
