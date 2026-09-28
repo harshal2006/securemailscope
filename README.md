@@ -135,12 +135,20 @@ is theoretically capable of.
   `--json` output that AUTH LOGIN/PLAIN base64 blobs and raw passwords
   never appear, while non-secret envelope data (e.g. `MAIL FROM`
   addresses) is left intact.
+- Expired and self-signed certificates: captured real STARTTLS sessions
+  against the lab server temporarily configured with
+  `lab/certs/expired.crt` and `lab/certs/selfsigned.crt`. Independently
+  confirmed with `openssl s_client` (`Verify return code: 10`/`18`) and
+  `tshark` (decoded the wire cert's ASN.1 `notAfter`) before running the
+  analyzer, which correctly fired `CERT_EXPIRED` (HIGH, score 65) and
+  `CERT_SELF_SIGNED` (MEDIUM, score 80) respectively.
 
 **Not yet verified against real captures** (implemented, but only
 exercised with synthetic `Session`/`TLSInfo`/`CertInfo`/`StarttlsAnalysis`
 objects in unit tests, not real pcaps):
-- Expired, self-signed, weak-key (RSA-1024), and weak-signature-hash
-  (SHA-1) certificate findings.
+- Weak-key (RSA-1024) and weak-signature-hash (SHA-1) certificate
+  findings - `lab/gen_certs.py` supports generating these via flags, but
+  no real capture against them has been made yet.
 - Weak cipher suite findings (RC4/3DES/NULL/anonymous-DH) - the lab
   server's OpenSSL only negotiates modern ciphers by default, and no
   legacy-cipher lab config has been built.

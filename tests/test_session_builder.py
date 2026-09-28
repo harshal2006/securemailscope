@@ -110,3 +110,21 @@ def test_expired_cert_is_observed_and_flagged_expired(expired_cert_session):
     assert cert.not_after.year == 2025
     assert cert.not_after.month == 9
     assert cert.not_after.day == 28
+
+
+@pytest.fixture(scope="module")
+def selfsigned_cert_session():
+    packets = read_packets(FIXTURES / "S19_smtp_587_starttls_selfsigned_cert.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    return sessions[0]
+
+
+def test_selfsigned_cert_is_observed_and_flagged(selfsigned_cert_session):
+    tls_info = selfsigned_cert_session.tls_info
+    assert tls_info.cert_observable is True
+    cert = tls_info.leaf_cert
+    assert cert.subject_cn == "mail.lab.test"
+    assert cert.self_signed is True
+    assert cert.issuer_cn == cert.subject_cn
+    assert cert.is_expired is False

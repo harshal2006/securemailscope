@@ -284,3 +284,13 @@ def test_real_expired_cert_pcap_triggers_cert_expired(rules):
     assert expired_finding.severity == "HIGH"
     # STARTTLS was used correctly here - only the cert itself is bad.
     assert not any(f.rule_id in ("T-01", "T-02", "T-03") for f in findings)
+
+
+def test_real_selfsigned_cert_pcap_triggers_cert_self_signed(rules):
+    session, analysis = _real_session_and_analysis(
+        "S19_smtp_587_starttls_selfsigned_cert.pcap"
+    )
+    findings = evaluate_session(session, rules, analysis)
+    ss_finding = next(f for f in findings if f.rule_id == "CERT_SELF_SIGNED")
+    assert ss_finding.severity == "MEDIUM"
+    assert not any(f.rule_id == "CERT_EXPIRED" for f in findings)

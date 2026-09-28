@@ -82,3 +82,22 @@ their original contents immediately after the capture.
 **Then ran the analyzer** (`python -m core.analyze
 S18_smtp_587_starttls_expired_cert.pcap`): reported `expired=True` and
 fired `[HIGH] CERT_EXPIRED`, dropping the session score from 100 to 65.
+
+## S19 — `S19_smtp_587_starttls_selfsigned_cert.pcap`
+
+Same procedure as S18, using `lab/certs/selfsigned.crt`/`selfsigned.key`
+instead:
+
+```
+openssl s_client -connect 127.0.0.1:2587 -starttls smtp -tls1_2 \
+        -CAfile lab/certs/ca.crt -quiet
+```
+
+**Verified independently of the analyzer, before running it:**
+- `openssl s_client` reported `Verify return code: 18 (self-signed
+  certificate)`, with `subject=CN = mail.lab.test` equal to
+  `issuer=CN = mail.lab.test`, and `Protocol: TLSv1.2`.
+- `tshark` shows the Certificate handshake message (frame 17) present.
+
+**Then ran the analyzer**: reported `self_signed=True`, fired `[MEDIUM]
+CERT_SELF_SIGNED`, session score 80/100.
