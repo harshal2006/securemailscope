@@ -83,3 +83,30 @@ def test_tls13_implicit_mode(tls13_implicit_session):
 
 def test_tls13_implicit_cert_not_observable(tls13_implicit_session):
     assert tls13_implicit_session.tls_info.cert_observable is False
+
+
+@pytest.fixture(scope="module")
+def expired_cert_session():
+    packets = read_packets(FIXTURES / "S18_smtp_587_starttls_expired_cert.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    return sessions[0]
+
+
+def test_expired_cert_session_protocol_and_role(expired_cert_session):
+    s = expired_cert_session
+    assert s.protocol == "smtp"
+    assert s.tls_mode == "starttls"
+    assert s.role == "submission"
+
+
+def test_expired_cert_is_observed_and_flagged_expired(expired_cert_session):
+    tls_info = expired_cert_session.tls_info
+    assert tls_info.negotiated_version == "TLS 1.2"
+    assert tls_info.cert_observable is True
+    cert = tls_info.leaf_cert
+    assert cert.subject_cn == "mail.lab.test"
+    assert cert.is_expired is True
+    assert cert.not_after.year == 2025
+    assert cert.not_after.month == 9
+    assert cert.not_after.day == 28

@@ -273,3 +273,14 @@ def test_real_s01b_triggers_neither_t01_nor_t02(rules):
     assert "T-01" not in rule_ids
     assert "T-02" not in rule_ids
     assert "T-03" not in rule_ids
+
+
+def test_real_expired_cert_pcap_triggers_cert_expired(rules):
+    session, analysis = _real_session_and_analysis(
+        "S18_smtp_587_starttls_expired_cert.pcap"
+    )
+    findings = evaluate_session(session, rules, analysis)
+    expired_finding = next(f for f in findings if f.rule_id == "CERT_EXPIRED")
+    assert expired_finding.severity == "HIGH"
+    # STARTTLS was used correctly here - only the cert itself is bad.
+    assert not any(f.rule_id in ("T-01", "T-02", "T-03") for f in findings)
