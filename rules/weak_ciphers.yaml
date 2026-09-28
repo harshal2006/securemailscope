@@ -1,0 +1,19 @@
+# Cipher suite hex codes (as 0xNNNN, lowercase) known to be weak/broken.
+# Not exhaustive - covers NULL, RC4, 3DES, and anonymous-DH suites, the
+# categories most likely to show up in a legacy mail server's config.
+
+rule_id: WEAK_CIPHER_SUITE
+severity: HIGH
+score_impact: 20
+message: "Negotiated cipher suite is weak or broken."
+
+weak_suites:
+  "0x0000": "NULL cipher (no encryption)"
+  "0x0001": "NULL cipher (no encryption)"
+  "0x0002": "NULL cipher (no encryption)"
+  "0x0004": "RC4 (broken stream cipher)"
+  "0x0005": "RC4 (broken stream cipher)"
+  "0x000a": "3DES (64-bit block cipher, vulnerable to Sweet32)"
+  "0xc012": "3DES via ECDHE (64-bit block cipher, vulnerable to Sweet32)"
+  "0x0018": "Anonymous DH (no server authentication)"
+  "0x001b": "Anonymous DH (no server authentication)"

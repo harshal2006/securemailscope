@@ -1,0 +1,28 @@
+# Severity/scoring metadata for certificate findings. Matching conditions
+# (e.g. what counts as a "weak" key size) live in core/rules_engine.py;
+# this file only holds the human-facing message and score impact.
+
+CERT_EXPIRED:
+  severity: HIGH
+  score_impact: 30
+  message: "Certificate is expired (or not yet valid)."
+
+CERT_SELF_SIGNED:
+  severity: MEDIUM
+  score_impact: 15
+  message: "Certificate is self-signed; not verifiable via a trusted CA chain."
+
+CERT_WEAK_KEY:
+  severity: HIGH
+  score_impact: 25
+  message: "Certificate public key is below the minimum safe size (RSA/DSA < 2048 bits)."
+
+CERT_WEAK_SIGNATURE_HASH:
+  severity: HIGH
+  score_impact: 25
+  message: "Certificate is signed using a weak hash algorithm (MD5 or SHA-1)."
+
+CERT_NOT_OBSERVABLE:
+  severity: INFO
+  score_impact: 0
+  message: "Certificate not observable from this capture; see reason for detail."

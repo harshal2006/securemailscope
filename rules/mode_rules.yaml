@@ -1,0 +1,4 @@
+NO_TLS_OBSERVED:
+  severity: CRITICAL
+  score_impact: 60
+  message: "No TLS/STARTTLS handshake observed for this session; traffic appears to be entirely cleartext."
