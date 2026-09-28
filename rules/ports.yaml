@@ -1,0 +1,19 @@
+# Port -> protocol/mode mapping used to interpret captured sessions.
+# "starttls_ports" carry plaintext first, then may upgrade via STARTTLS/STLS.
+# "implicit_ports" are TLS from the first byte of the session.
+#
+# Includes both IANA-standard ports and the SecureMailScope lab's
+# host-published ports (see lab/docker/docker-compose.yml), since Docker
+# remaps privileged ports to avoid needing root.
+
+smtp:
+  starttls_ports: [25, 587, 2525]
+  implicit_ports: [465, 4465]
+
+imap:
+  starttls_ports: [143, 2143]
+  implicit_ports: [993, 2993]
+
+pop3:
+  starttls_ports: [110, 2110]
+  implicit_ports: [995, 2995]
