@@ -287,3 +287,94 @@ Genuinely attempted, not faked. Three approaches tried:
    package repos requiring `archive.debian.org` and
    `--allow-unauthenticated` just to install `openssl`), which was
    judged out of scope for this "if time remains" item.
+
+## S28 — `S28_imap_2143_plaintext_login.pcap`
+
+IMAP plaintext `LOGIN` without STARTTLS. Sent directly over `nc` (no TLS
+tooling needed for a plaintext session):
+
+```
+printf 'a1 LOGIN labuser labpass\r\na2 LOGOUT\r\n' | nc -w 3 127.0.0.1 2143
+```
+
+**Found a real bug via this capture**: IMAP commands are tagged (`a1
+LOGIN labuser labpass`), so `core/starttls.py`'s original
+`_classify_line` - which only checked the *first* word of a line -
+classified this as a generic "command", not "auth_command". Result:
+`auth_before_tls` stayed `False` and `T-01` never fired, despite the
+dummy credentials sitting in cleartext on the wire (confirmed with
+`strings`: `a1 LOGIN labuser labpass` appears verbatim). The tool's own
+*redaction* still worked correctly here (`core/redact.py`'s regex
+already had a tagged-LOGIN branch), so nothing leaked in output - only
+the T-01 detection was silently missing.
+
+**Fixed**: `_classify_line` now checks the first *two* words
+(`_client_command_candidates`), catching both the SMTP/POP3 untagged
+form and IMAP's tagged form.
+
+**After the fix, ran the analyzer**: `auth_before_tls=True`, fires
+`[CRITICAL] T-01` and `[HIGH] T-02`, session score 0/100.
+
+## S29 — `S29_imap_2143_starttls_login.pcap`
+
+IMAP STARTTLS then `LOGIN` inside TLS:
+
+```
+openssl s_client -connect 127.0.0.1:2143 -starttls imap -tls1_2 \
+        -CAfile lab/certs/ca.crt -quiet
+# (stdin: "a1 LOGIN labuser labpass\r\na2 LOGOUT\r\n")
+```
+
+**Found a second real bug via this capture**: IMAP's tagged STARTTLS
+success reply (`a1 OK Begin TLS negotiation now.`) wasn't recognized by
+the original success-reply check (which only matched untagged
+`220`/`+OK`/`* OK`), so `starttls_success` stayed `False` even though
+STARTTLS had genuinely succeeded (confirmed via `tshark`: TLS
+ClientHello/ServerHello immediately follow).
+
+**Fixed**: generalized the check (`_is_success_reply`) to also
+recognize IMAP's `<tag> OK ...` form.
+
+**Verified independently of the analyzer**: `tshark` shows the TLS
+handshake occurring, and `strings` finds no trace of `labpass` or its
+base64 form anywhere - `LOGIN` happened entirely inside TLS.
+
+**After the fix, ran the analyzer**: `starttls_issued=True`,
+`starttls_success=True`, `auth_before_tls=False`, no `T-01`/`T-02`
+findings, session score 95/100 (only the recommended-but-not-required
+TLS 1.2 deduction).
+
+## S30 — `S30_pop3_2110_plaintext_userpass.pcap`
+
+POP3 plaintext `USER`/`PASS` without STLS, including a `CAPA` probe first
+so the capability listing (containing `STLS`) is actually observed:
+
+```
+printf 'CAPA\r\nUSER labuser\r\nPASS labpass\r\nQUIT\r\n' | nc -w 3 127.0.0.1 2110
+```
+
+POP3 has no command tags, so this one worked correctly without any code
+changes. **Verified**: `strings` shows `PASS labpass` in cleartext (the
+point of the demonstration). **Ran the analyzer**:
+`capability_advertised_starttls=True` (from the `STLS` line in the CAPA
+response), `auth_before_tls=True`, fires `T-01` and `T-02`, session
+score 0/100.
+
+## S31 — `S31_pop3_2110_stls_userpass.pcap`
+
+POP3 STLS then `USER`/`PASS` inside TLS, without a `CAPA` probe first
+(straight to `STLS`):
+
+```
+openssl s_client -connect 127.0.0.1:2110 -starttls pop3 -tls1_2 \
+        -CAfile lab/certs/ca.crt -quiet
+# (stdin: "USER labuser\r\nPASS labpass\r\nQUIT\r\n")
+```
+
+**Verified independently**: `tshark` shows the TLS handshake; `strings`
+finds no trace of `labpass` anywhere. **Ran the analyzer**:
+`starttls_issued=True`, `starttls_success=True`, `auth_before_tls=False`.
+`capability_advertised_starttls` is `None` here, not `True`/`False` -
+this capture never sent `CAPA`, so the capability listing was never
+observed, and the tool correctly refuses to guess. Session score
+95/100.

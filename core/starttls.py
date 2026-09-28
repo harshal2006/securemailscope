@@ -64,21 +64,49 @@ def first_word_is(line: str, *words: str) -> bool:
     return first in words
 
 
+def _client_command_candidates(stripped: str) -> list[str]:
+    """Words to check against command-keyword sets.
+
+    IMAP commands are tagged ("a1 LOGIN user pass"), unlike SMTP/POP3
+    ("LOGIN"/"USER"/"PASS" as the first word). Checking both the first
+    and second word catches both without needing per-protocol parsing -
+    found as a real bug: a real plaintext IMAP LOGIN capture was not
+    being classified as auth_command because only the tag ("a1") was
+    checked, silently missing a real T-01 (plaintext auth before TLS).
+    """
+    words = stripped.split()
+    return [w.upper() for w in words[:2]]
+
+
+def _is_success_reply(stripped: str) -> bool:
+    """SMTP/POP3: untagged "220 ..." / "+OK ..." / "* OK ...". IMAP:
+    tagged "<tag> OK ..." where <tag> is client-chosen (often "a1",
+    ".", "A001", ...) - found as a real bug: an IMAP STARTTLS success
+    reply ("a1 OK Begin TLS negotiation now.") was not recognized
+    because only the untagged forms were checked, so starttls_success
+    stayed False even when STARTTLS genuinely succeeded.
+    """
+    if stripped.startswith(("220", "+OK", "* OK")):
+        return True
+    words = stripped.split(None, 2)
+    return len(words) >= 2 and words[1].upper() == "OK"
+
+
 def _classify_line(line: str, direction: str) -> str:
     stripped = line.strip()
-    first_word = stripped.split(None, 1)[0].upper() if stripped else ""
+    candidates = _client_command_candidates(stripped)
 
     if direction == "client":
-        if first_word in STARTTLS_COMMAND_WORDS:
+        if any(w in STARTTLS_COMMAND_WORDS for w in candidates):
             return "starttls_command"
-        if first_word in AUTH_COMMAND_WORDS:
+        if any(w in AUTH_COMMAND_WORDS for w in candidates):
             return "auth_command"
         return "command"
 
     # server -> client
     if "STARTTLS" in stripped.upper() or "STLS" in stripped.upper():
         return "capability_starttls"
-    if stripped.startswith("220") or stripped.startswith("+OK") or stripped.startswith("* OK"):
+    if _is_success_reply(stripped):
         return "banner_or_success"
     return "response"
 
@@ -170,7 +198,10 @@ def build_timeline(
                     TimelineEvent(frame_number, direction, "capability", redacted_text)
                 )
             elif kind == "banner_or_success":
-                if awaiting_starttls_reply and line.strip().startswith(("220", "+OK")):
+                # _classify_line already confirmed this line is a
+                # success-shaped reply (_is_success_reply); if we were
+                # waiting on the STARTTLS response, this is it.
+                if awaiting_starttls_reply:
                     analysis.starttls_success = True
                     awaiting_starttls_reply = False
                     analysis.timeline.append(

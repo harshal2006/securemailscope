@@ -217,3 +217,37 @@ def test_tls1_0_negotiated_version_observed(tls1_0_session):
     # -cipher DEFAULT@SECLEVEL=0` (local OpenSSL 3.0 refuses the
     # legacy ServerKeyExchange sigalg at its default security level).
     assert tls1_0_session.tls_info.negotiated_version == "TLS 1.0"
+
+
+def test_imap_plaintext_session_protocol_and_mode():
+    packets = read_packets(FIXTURES / "S28_imap_2143_plaintext_login.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    assert sessions[0].protocol == "imap"
+    assert sessions[0].tls_mode == "plaintext_only"
+
+
+def test_imap_starttls_session_cert_observable():
+    packets = read_packets(FIXTURES / "S29_imap_2143_starttls_login.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    assert sessions[0].protocol == "imap"
+    assert sessions[0].tls_mode == "starttls"
+    assert sessions[0].tls_info.cert_observable is True
+
+
+def test_pop3_plaintext_session_protocol_and_mode():
+    packets = read_packets(FIXTURES / "S30_pop3_2110_plaintext_userpass.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    assert sessions[0].protocol == "pop3"
+    assert sessions[0].tls_mode == "plaintext_only"
+
+
+def test_pop3_stls_session_cert_observable():
+    packets = read_packets(FIXTURES / "S31_pop3_2110_stls_userpass.pcap")
+    sessions = build_sessions(packets)
+    assert len(sessions) == 1
+    assert sessions[0].protocol == "pop3"
+    assert sessions[0].tls_mode == "starttls"
+    assert sessions[0].tls_info.cert_observable is True

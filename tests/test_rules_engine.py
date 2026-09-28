@@ -392,3 +392,38 @@ def test_real_tls1_0_pcap_triggers_tls_version_1_0(rules):
     version_finding = next(f for f in findings if f.rule_id == "TLS_VERSION_1_0")
     assert version_finding.severity == "HIGH"
     assert version_finding.plan_id == "P-02"
+
+
+def test_real_imap_plaintext_login_triggers_t01(rules):
+    session, analysis = _real_session_and_analysis("S28_imap_2143_plaintext_login.pcap")
+    assert session.protocol == "imap"
+    findings = evaluate_session(session, rules, analysis)
+    t01 = next(f for f in findings if f.rule_id == "T-01")
+    assert t01.severity == "CRITICAL"
+
+
+def test_real_imap_starttls_login_triggers_neither_t01_nor_t02(rules):
+    session, analysis = _real_session_and_analysis("S29_imap_2143_starttls_login.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    rule_ids = {f.rule_id for f in findings}
+    assert "T-01" not in rule_ids
+    assert "T-02" not in rule_ids
+
+
+def test_real_pop3_plaintext_userpass_triggers_t01_and_t02(rules):
+    session, analysis = _real_session_and_analysis(
+        "S30_pop3_2110_plaintext_userpass.pcap"
+    )
+    assert session.protocol == "pop3"
+    findings = evaluate_session(session, rules, analysis)
+    rule_ids = {f.rule_id for f in findings}
+    assert "T-01" in rule_ids
+    assert "T-02" in rule_ids
+
+
+def test_real_pop3_stls_userpass_triggers_neither_t01_nor_t02(rules):
+    session, analysis = _real_session_and_analysis("S31_pop3_2110_stls_userpass.pcap")
+    findings = evaluate_session(session, rules, analysis)
+    rule_ids = {f.rule_id for f in findings}
+    assert "T-01" not in rule_ids
+    assert "T-02" not in rule_ids

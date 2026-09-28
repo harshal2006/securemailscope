@@ -250,9 +250,21 @@ objects in unit tests, not real pcaps):
   was not attempted for real capture, for the same reason as the weak
   ciphers above - it predates modern OpenSSL's supported protocol list
   entirely.)
-- IMAP/POP3 STARTTLS timeline parsing (capability detection, STLS) -
-  implemented with the same logic as SMTP, but no real IMAP/POP3
-  plaintext-auth pcap has been captured, only SMTP.
+- IMAP/POP3 STARTTLS timeline parsing (capability detection, STLS,
+  T-01/T-02): captured plaintext `LOGIN`/`USER`+`PASS` and
+  STARTTLS/STLS-then-auth for both protocols. This surfaced two real
+  bugs, both fixed: (1) IMAP commands are tagged (`a1 LOGIN user
+  pass`), so checking only the first word of a line missed the LOGIN
+  command entirely - `auth_before_tls` stayed `False` and `T-01` never
+  fired despite real plaintext credentials on the wire; (2) IMAP's
+  tagged STARTTLS success reply (`a1 OK Begin TLS negotiation now.`)
+  wasn't recognized as a success reply (only untagged `220`/`+OK` were),
+  so `starttls_success` stayed `False` even when STARTTLS genuinely
+  succeeded. Both fixed by checking the first *two* words for tagged
+  commands and generalizing the success-reply check
+  (`core/starttls.py`). Confirmed with `tshark`/`strings` that
+  credentials never leak in either the wire capture (STARTTLS/STLS
+  cases) or the tool's own output (all cases, via redaction).
 
 **Not built:** report rendering (HTML/PDF), a web UI or dashboard, an
 API, and any ML-based scoring or anomaly detection. Out of scope for this
