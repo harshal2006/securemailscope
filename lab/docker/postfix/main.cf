@@ -1,0 +1,27 @@
+# Lab-only Postfix config. Not for production use.
+
+myhostname = mail.lab.test
+mydomain = lab.test
+myorigin = $mydomain
+inet_interfaces = all
+inet_protocols = ipv4
+mydestination = $myhostname, localhost.$mydomain, localhost
+mynetworks = 127.0.0.0/8
+
+# TLS material, bind-mounted from lab/certs at runtime.
+smtpd_tls_cert_file = /etc/ssl/lab/valid.crt
+smtpd_tls_key_file = /etc/ssl/lab/valid.key
+smtpd_tls_CAfile = /etc/ssl/lab/ca.crt
+
+# STARTTLS on the standard submission/25 port (opportunistic, not required,
+# so we can also observe plaintext-then-upgrade sessions if needed).
+smtpd_tls_security_level = may
+smtpd_tls_loglevel = 1
+
+# Dummy AUTH for lab testing only.
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
+smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
+
+compatibility_level = 3.6

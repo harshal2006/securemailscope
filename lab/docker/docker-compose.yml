@@ -1,0 +1,24 @@
+# Lab-only mail server for SecureMailScope traffic capture.
+# Never expose beyond loopback; never point at a real network. See CLAUDE.md.
+
+services:
+  lab-mail:
+    build: .
+    container_name: securemailscope-lab-mail
+    hostname: mail.lab.test
+    networks:
+      - lab-isolated
+    volumes:
+      - ../certs:/etc/ssl/lab:ro
+    ports:
+      - "127.0.0.1:2525:25"   # SMTP STARTTLS
+      - "127.0.0.1:4465:465"  # SMTP implicit TLS
+      - "127.0.0.1:2143:143"  # IMAP STARTTLS
+      - "127.0.0.1:2993:993"  # IMAP implicit TLS
+      - "127.0.0.1:2110:110"  # POP3 STLS
+      - "127.0.0.1:2995:995"  # POP3 implicit TLS
+
+networks:
+  lab-isolated:
+    driver: bridge
+    internal: false
