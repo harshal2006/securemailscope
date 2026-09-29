@@ -54,9 +54,12 @@ a pcap.
 | T-07 | — | no | no | no | No confirmed mapping. |
 | T-08 | — | no | no | no | No confirmed mapping. |
 
-**Change this session:** `TLS_VERSION_SSL3`, `TLS_VERSION_1_1`,
+**Change, previous session:** `TLS_VERSION_SSL3`, `TLS_VERSION_1_1`,
 `WEAK_CIPHER_SUITE`, and `NO_FORWARD_SECRECY` moved from
-synthetic-only to real-verified — see Part A below.
+synthetic-only to real-verified — see "Previously infeasible, now
+closed" below. No rule-detection changes this session; this session
+added the API and dashboard layers on top of the existing, unchanged
+analyzer/report pipeline.
 
 ## Report renderer (new this session, Part B)
 
@@ -79,8 +82,52 @@ were being swallowed as bogus HTML tags by the browser. Fixed by
 forcing `autoescape=True` unconditionally; confirmed with a second
 screenshot and a regression test (`test_html_placeholders_are_escaped_not_swallowed`).
 
-Not done: PDF export, an API, a dashboard, or ML — explicitly out of
-scope for this round.
+## API and dashboard (new this session)
+
+**API** (`api/main.py`, FastAPI + SQLite via SQLAlchemy): `POST
+/api/v1/analyze` (multipart upload, background job), `GET
+/api/v1/jobs/{id}` (status), `/summary`, `/sessions` (paginated +
+filterable), `/sessions/{id}`, `/findings` (severity-sorted), `/report
+?format=json|html` (reuses `core/report.py` directly, no
+reimplementation), `/health`. The background task calls
+`core.report.build_report()` exactly once per job and caches its
+JSON/HTML; every read endpoint serves from that cache.
+
+Verified against real fixtures (`tests/test_api.py`), not mocked data:
+uploaded S17, S18, S19, and all four legacy captures (S32-S35) through
+the actual HTTP API and asserted every endpoint's response equals what
+`core.report.build_report()` computes directly for the same file - no
+mismatches found. Confirmed background processing doesn't block the
+server using a real running `uvicorn` process, not Starlette's
+`TestClient` (`tests/test_api_live_server.py`): `POST /analyze` returns
+in under 1s regardless of pcap size, and 4 concurrent submissions
+complete in well under 4x a single job's time.
+
+**Dashboard** (`dashboard/app.py`, Streamlit + Plotly): talks to the
+API over HTTP only, never imports `core.*`. Pages: Overview (gauge,
+KPI tiles, severity donut, top-3 fix-first), Sessions (filterable table
++ drill-down), Certificates (inventory + expiry), Findings (prioritized
+queue with recommendations). "Demo mode" auto-loads a real fixture
+(S17) on first launch so it's never empty.
+
+Verified by actually running both processes and uploading S17 through
+the UI, then reviewing real screenshots of the Overview and Findings
+pages (not just reading the code): posture score 0/100, grade F,
+findings-by-severity donut (CRITICAL 2 / HIGH 1), and the findings
+queue (T-01, NO_TLS_OBSERVED, T-02, in that order) all matched
+`core.analyze`'s output for the same file exactly. Getting the
+screenshot required real debugging: headless Chrome's CDP
+`Page.captureScreenshot` hung indefinitely in this sandboxed
+environment (confirmed with a trivial `data:` URL, unrelated to
+Streamlit) - the dedicated `chrome-headless-shell` binary (via
+`@puppeteer/browsers`) worked instead. Also covered by
+`tests/test_dashboard.py` using Streamlit's own `st.testing.v1.AppTest`
+against a real running API - more reliable for automated/CI
+verification than a screenshot, which remains a useful one-time manual
+check alongside it.
+
+Still missing: PDF export, ML-based scoring, and anomaly detection -
+explicitly out of scope for this round (next round, per the user).
 
 ## Notable bugs found and fixed via real verification, not code review
 
@@ -130,8 +177,9 @@ exchange, were not attempted this round and remain synthetic-only.
 
 ## Not built (by design, per explicit instruction)
 
-PDF export, a web UI or dashboard, an API, ML-based scoring or anomaly
-detection.
+PDF export, ML-based scoring, and anomaly detection. (The API and
+dashboard, listed here as "not built" in the previous revision of this
+file, are now both built and verified - see above.)
 
 ## Reproducing
 
@@ -144,7 +192,7 @@ From `securemailscope/`, with the venv active
 pytest -q
 ```
 
-Expect **136 passed**.
+Expect **170 passed**.
 
 ### Analyzer against key captures
 
@@ -193,6 +241,25 @@ open /tmp/report.html   # macOS
 
 Or `--json out.json` for the schema-validated JSON form; omit both flags
 to print JSON to stdout.
+
+### API + dashboard
+
+```
+pip install fastapi "uvicorn[standard]" sqlalchemy python-multipart httpx
+uvicorn api.main:app          # terminal 1
+
+pip install streamlit plotly requests
+streamlit run dashboard/app.py  # terminal 2
+```
+
+The dashboard auto-loads S17 on first launch. Or drive the API
+directly:
+
+```
+curl -F file=@tests/fixtures/pcaps/S17_smtp_587_plaintext_auth.pcap \
+     http://127.0.0.1:8000/api/v1/analyze
+curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/summary
+```
 
 ### Regenerating a live capture (optional, needs Docker)
 
