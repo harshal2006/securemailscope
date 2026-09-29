@@ -111,6 +111,42 @@ never the full plan's imagined catalogue. Each has a short fix (with
 Postfix/Dovecot config snippets where relevant) and a verification command.
 All credential-bearing text is redacted the same way as `core/analyze.py`.
 
+## Running the API
+
+`api/main.py` is a FastAPI wrapper around the same analyzer/report
+pipeline - every endpoint reads results computed by one real call into
+`core/report.py` (never reimplemented), cached in a SQLite job store
+(`api/db.py`) so results are consistent for the life of a job.
+
+```
+pip install fastapi "uvicorn[standard]" sqlalchemy python-multipart httpx
+uvicorn api.main:app --reload
+```
+
+Then, e.g.:
+
+```
+curl -F file=@tests/fixtures/pcaps/S17_smtp_587_plaintext_auth.pcap \
+     http://127.0.0.1:8000/api/v1/analyze
+# {"job_id": "..."}
+
+curl http://127.0.0.1:8000/api/v1/jobs/<job_id>
+curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/summary
+curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/sessions
+curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/sessions/0
+curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/findings
+curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/report?format=html
+```
+
+Interactive API docs: `http://127.0.0.1:8000/docs` (FastAPI's built-in
+Swagger UI).
+
+The upload is analyzed by a `BackgroundTasks` job (queued → running →
+done/failed), so `POST /analyze` returns immediately regardless of pcap
+size - confirmed with a real running server (not just Starlette's
+`TestClient`, whose background-task execution doesn't actually prove
+non-blocking behavior) in `tests/test_api_live_server.py`.
+
 ## What the rules check
 
 - **TLS version** (`rules/tls_version_rules.yaml`): SSLv3/TLS 1.0/TLS 1.1

@@ -14,5 +14,9 @@ lab/certs/*key*.pem
 data/pcaps/*.pcap
 data/pcaps/*.pcapng
 
+# API job store: uploaded pcaps + SQLite DB (runtime data, not source)
+data/uploads/
+data/securemailscope.db
+
 # OS
 .DS_Store
