@@ -1,0 +1,31 @@
+pcap_path,scenario_id,risk_class,ground_truth_basis
+S01b_smtp_587_starttls_auth.pcap,smtp_starttls_clean_tls13,Low,STARTTLS+TLS1.3+valid cert+AUTH after TLS (known clean config)
+S17_smtp_587_plaintext_auth.pcap,smtp_plaintext_auth_submission,Critical,AUTH LOGIN sent in cleartext on a client-facing port (known plaintext-credential config)
+S18_smtp_587_starttls_expired_cert.pcap,smtp_cert_expired,Medium,Server cert swapped for an expired one (known cert config)
+S19_smtp_587_starttls_selfsigned_cert.pcap,smtp_cert_selfsigned,Medium,Server cert swapped for a self-signed one (known cert config)
+S20_smtp_587_shortlived_cert.pcap,smtp_starttls_clean_tls12,Low,STARTTLS+TLS1.2+genuinely-valid cert at capture time (known clean config)
+S21_smtp_25_plaintext_auth_mx.pcap,smtp_plaintext_auth_mx,Critical,AUTH LOGIN sent in cleartext on an mx-role port (known plaintext-credential config)
+S22_smtp_587_sha1_signed_cert.pcap,smtp_cert_weak_sig_sha1,High,Server cert signed with SHA-1 (known cert config)
+S23_smtp_587_rsa1024_cert.pcap,smtp_cert_weak_key_rsa1024,High,Server cert uses a 1024-bit RSA key (known cert config)
+S24_smtp_587_wrong_sni.pcap,smtp_cert_hostname_mismatch,High,Client SNI does not match the cert's SAN (known mismatch config)
+S25_smtp_587_no_sni.pcap,smtp_starttls_clean_tls12,Low,STARTTLS+TLS1.2+valid cert, no SNI sent (known clean config; absence of SNI is not itself a risk)
+S26_smtp_2588_starttls_disabled.pcap,smtp_starttls_disabled,High,Server has STARTTLS disabled entirely on a client-facing port (known config); no AUTH was attempted in this session
+S27_smtp_587_tls1_0.pcap,smtp_tls1_0,High,Client forced to TLS 1.0 (known deprecated-protocol config)
+S28_imap_2143_plaintext_login.pcap,imap_plaintext_login,Critical,IMAP LOGIN sent in cleartext (known plaintext-credential config)
+S29_imap_2143_starttls_login.pcap,imap_starttls_clean,Low,STARTTLS then LOGIN inside TLS (known clean config)
+S30_pop3_2110_plaintext_userpass.pcap,pop3_plaintext_userpass,Critical,POP3 USER/PASS sent in cleartext (known plaintext-credential config)
+S31_pop3_2110_stls_userpass.pcap,pop3_stls_clean,Low,STLS then USER/PASS inside TLS (known clean config)
+S32_legacy_rc4.pcap,legacy_rc4,Critical,RC4 stream cipher, static RSA key exchange (known broken-cipher config)
+S33_legacy_3des.pcap,legacy_3des,High,3DES block cipher, Sweet32-vulnerable (known weak-cipher config)
+S34_legacy_ssl3.pcap,legacy_sslv3,Critical,SSLv3 negotiated, POODLE-vulnerable (known broken-protocol config)
+S35_legacy_tls1_1.pcap,legacy_tls1_1,High,TLS 1.1 negotiated (known deprecated-protocol config)
+smtp_implicit_tls13_valid.pcap,smtp_implicit_clean_tls13,Low,Implicit TLS+TLS1.3+valid cert (known clean config)
+smtp_starttls_tls12_valid.pcap,smtp_starttls_clean_tls12,Low,STARTTLS+TLS1.2+valid cert (known clean config)
+smtp_starttls_tls13_valid.pcap,smtp_starttls_clean_tls13,Low,STARTTLS+TLS1.3+valid cert (known clean config)
+ml_variants/mlv01_smtp_starttls_clean_tls12_pysmtplib.pcap,smtp_starttls_clean_tls12,Low,Same clean TLS1.2 config as S20/S25, replayed with Python smtplib instead of openssl/swaks
+ml_variants/mlv02_smtp_plaintext_auth_submission_pysmtplib.pcap,smtp_plaintext_auth_submission,Critical,Same plaintext-AUTH config as S17, replayed with Python smtplib instead of swaks
+ml_variants/mlv03_smtp_starttls_disabled_pysmtplib.pcap,smtp_starttls_disabled_with_plaintext_auth,Critical,STARTTLS disabled AND this session's client also sent AUTH in the clear (a strictly worse outcome than S26 on the same server config - real credentials exposed, not just STARTTLS missing)
+ml_variants/mlv04_imap_plaintext_login_pyimaplib.pcap,imap_plaintext_login,Critical,Same plaintext-LOGIN config as S28, replayed with Python imaplib
+ml_variants/mlv05_imap_starttls_clean_pyimaplib.pcap,imap_starttls_clean,Low,Same clean STARTTLS config as S29, replayed with Python imaplib
+ml_variants/mlv06_pop3_plaintext_userpass_pypoplib.pcap,pop3_plaintext_userpass,Critical,Same plaintext-USER/PASS config as S30, replayed with Python poplib
+ml_variants/mlv07_pop3_stls_clean_pypoplib.pcap,pop3_stls_clean,Low,Same clean STLS config as S31, replayed with Python poplib
