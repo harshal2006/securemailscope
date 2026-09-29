@@ -1,0 +1,18 @@
+{
+  "n_sessions": 21,
+  "n_ground_truth_anomalies": 4,
+  "anomalous_scenarios": [
+    "legacy_3des",
+    "legacy_rc4",
+    "legacy_sslv3",
+    "legacy_tls1_1"
+  ],
+  "tp": 4,
+  "fn": 0,
+  "fp": 10,
+  "tn": 7,
+  "precision": 0.2857142857142857,
+  "recall": 1.0,
+  "fpr": 0.5882352941176471,
+  "note": "Ground-truth anomalies are 4 legacy-cipher sessions repurposed from Part A's labelled dataset, not a dedicated injected-anomaly capture set. Coverage is thin; treat as a smoke test, not a validated detector."
+}

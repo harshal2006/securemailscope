@@ -3,6 +3,9 @@ from pathlib import Path
 import pytest
 
 from core.findings import Finding
+from ml.anomaly import ANOMALOUS_SCENARIOS, ANOMALY_FEATURE_NAMES
+from ml.anomaly import extract_anomaly_features_for_pcap
+from ml.anomaly import load_dataset as load_anomaly_dataset
 from ml.features import FEATURE_NAMES, extract_features_for_pcap
 from ml.fusion import fuse_severity
 from ml.train import load_dataset, run_grouped_cv
@@ -131,3 +134,48 @@ def test_grouped_cv_never_leaks_a_scenario_across_train_and_test():
     assert results["n_splits"] >= 2
     assert set(results["y_true"]) <= {"Low", "Medium", "High", "Critical"}
     assert results["confusion_matrix"].shape[0] == len(results["labels_present"])
+
+
+# --- ml/anomaly.py: per-session Isolation Forest, scoped honestly ---
+
+
+def test_anomaly_feature_extraction_sanity():
+    feats = extract_anomaly_features_for_pcap(FIXTURES / "S32_legacy_rc4.pcap")
+    assert len(feats) == 1
+    row = feats[0]
+    assert list(row.keys()) == ANOMALY_FEATURE_NAMES
+    assert row["kex_is_static"] == 1.0  # RC4-SHA is static RSA kex
+
+
+def test_anomaly_timing_features_are_non_negative():
+    for name in ["S01b_smtp_587_starttls_auth.pcap", "S32_legacy_rc4.pcap"]:
+        feats = extract_anomaly_features_for_pcap(FIXTURES / name)
+        assert feats[0]["handshake_duration_seconds"] >= 0.0
+        assert feats[0]["bytes_before_tls"] >= 0.0
+
+
+def test_anomaly_dataset_excludes_no_tls_sessions():
+    # Sessions with no TLS at all (plaintext_only, e.g. S17) have no
+    # cipher/kex to compare and are correctly excluded from this
+    # per-session TLS-fingerprint anomaly detector.
+    X, y, scenario_ids, pcap_paths = load_anomaly_dataset()
+    assert "S17_smtp_587_plaintext_auth.pcap" not in pcap_paths
+    assert int(y.sum()) == 4  # exactly the 4 legacy-cipher sessions
+    assert set(s for s, a in zip(scenario_ids, y) if a) == ANOMALOUS_SCENARIOS
+
+
+def test_anomaly_detector_recalls_legacy_cipher_sessions():
+    from sklearn.ensemble import IsolationForest
+
+    X, y, scenario_ids, pcap_paths = load_anomaly_dataset()
+    clf = IsolationForest(contamination="auto", random_state=42)
+    clf.fit(X[~y])
+    pred_is_anomaly = clf.predict(X) == -1
+
+    tp = int((pred_is_anomaly & y).sum())
+    fn = int((~pred_is_anomaly & y).sum())
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    # Observed recall on this data is 1.0 (see ml/models/anomaly_metrics.json);
+    # assert a looser bound here so this test isn't brittle to minor
+    # sklearn version changes while still catching a real regression.
+    assert recall >= 0.5
