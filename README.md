@@ -147,6 +147,38 @@ size - confirmed with a real running server (not just Starlette's
 `TestClient`, whose background-task execution doesn't actually prove
 non-blocking behavior) in `tests/test_api_live_server.py`.
 
+## Running the dashboard
+
+`dashboard/app.py` is a Streamlit UI that talks to the API over plain
+HTTP only - it never imports `core.*` or runs analysis itself, so it
+also serves as a standalone proof that the API works on its own.
+
+```
+pip install streamlit plotly requests
+uvicorn api.main:app          # in one terminal
+streamlit run dashboard/app.py  # in another
+```
+
+On first launch it auto-loads a real fixture (S17, the worst-case
+plaintext-AUTH capture) through the real API, so it never opens to an
+empty state - "demo mode". The sidebar lets you switch to another
+bundled fixture or upload your own pcap. Pages: **Overview** (posture
+gauge, KPI tiles, severity donut, top-3 fix-first), **Sessions**
+(filterable table + drill-down using the dedicated `/sessions`
+endpoint), **Certificates** (inventory + expiry), **Findings**
+(prioritized queue with recommendations pulled from the API's
+`/report` response).
+
+Verified by actually running both processes, uploading S17 through the
+UI, and reviewing screenshots of the Overview and Findings pages: the
+posture score (0/100), grade (F), findings-by-severity donut
+(CRITICAL 2 / HIGH 1), and the findings queue (T-01, NO_TLS_OBSERVED,
+T-02, in that order) all matched `core.analyze`'s output for the same
+file exactly. Also covered by `tests/test_dashboard.py` using
+Streamlit's own `AppTest` framework against a real running API (not
+mocked) - more reliable for automated/CI verification than a
+screenshot, which was done as a one-time manual check alongside it.
+
 ## What the rules check
 
 - **TLS version** (`rules/tls_version_rules.yaml`): SSLv3/TLS 1.0/TLS 1.1
