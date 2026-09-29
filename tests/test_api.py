@@ -211,6 +211,23 @@ def test_report_never_leaks_credentials(client):
     assert "bGFicGFzcw" not in text
 
 
+def test_report_pdf_reuses_cached_html_no_recompute(client):
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    job_id = _upload_and_wait(client, "S18_smtp_587_starttls_expired_cert.pcap")
+    r = client.get(f"/api/v1/jobs/{job_id}/report", params={"format": "pdf"})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content[:5] == b"%PDF-"
+
+    reader = PdfReader(BytesIO(r.content))
+    text = "\n".join(page.extract_text() for page in reader.pages)
+    assert "CERT_EXPIRED" in text
+    assert "labpass" not in text
+
+
 def test_invalid_report_format_rejected(client):
     job_id = _upload_and_wait(client, "S17_smtp_587_plaintext_auth.pcap")
     r = client.get(f"/api/v1/jobs/{job_id}/report", params={"format": "xml"})

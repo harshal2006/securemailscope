@@ -97,12 +97,13 @@ redacted before being placed in this output - see CLAUDE.md.
 `core/report.py` renders the same analysis into a richer, structured report
 (executive summary, endpoint inventory, findings with evidence, certificate
 inventory, recommendations, and an appendix of limitations/rule catalogue)
-as JSON (schema-validated against `REPORT_JSON_SCHEMA`) or HTML:
+as JSON (schema-validated against `REPORT_JSON_SCHEMA`), HTML, or PDF:
 
 ```
 python -m core.report <path-to-pcap>                # JSON to stdout
 python -m core.report <path-to-pcap> --json out.json
 python -m core.report <path-to-pcap> --html out.html
+python -m core.report <path-to-pcap> --pdf out.pdf
 ```
 
 Recommendations (`rules/recommendations.yaml`) are only included for rule
@@ -110,6 +111,15 @@ IDs that actually appear as findings, and only for rules we implemented -
 never the full plan's imagined catalogue. Each has a short fix (with
 Postfix/Dovecot config snippets where relevant) and a verification command.
 All credential-bearing text is redacted the same way as `core/analyze.py`.
+
+PDF export (`render_pdf`/`render_pdf_from_html` in `core/report.py`) reuses
+the exact same HTML template as `--html` - it's the same `render_html()`
+output, printed to PDF via a headless Chromium's built-in print-to-pdf
+(`chrome --headless=new --print-to-pdf=...`), not a second template or a
+separate rendering path. Requires Google Chrome or Chromium installed
+locally (checked at common install paths, or set `$CHROME_PATH`). The API
+endpoint (below) renders PDF from the already-cached HTML for a job rather
+than recomputing the report.
 
 ## Running the API
 
@@ -136,6 +146,7 @@ curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/sessions
 curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/sessions/0
 curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/findings
 curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/report?format=html
+curl http://127.0.0.1:8000/api/v1/jobs/<job_id>/report?format=pdf -o report.pdf
 ```
 
 Interactive API docs: `http://127.0.0.1:8000/docs` (FastAPI's built-in

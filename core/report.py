@@ -11,7 +11,10 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import jsonschema
@@ -332,16 +335,88 @@ def render_html(report: Report) -> str:
     return template.render(report=report)
 
 
+# Common install locations for a Chromium-family browser with headless
+# print-to-pdf support. Checked in order; overridable via $CHROME_PATH.
+_CHROME_CANDIDATES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "google-chrome",
+    "chromium",
+    "chromium-browser",
+]
+
+
+def _find_chrome_binary() -> str:
+    import os
+
+    env_path = os.environ.get("CHROME_PATH")
+    if env_path and Path(env_path).exists():
+        return env_path
+    for candidate in _CHROME_CANDIDATES:
+        if Path(candidate).is_absolute():
+            if Path(candidate).exists():
+                return candidate
+        else:
+            found = shutil.which(candidate)
+            if found:
+                return found
+    raise RuntimeError(
+        "No Chromium-family browser found for PDF export. Install Google Chrome or "
+        "Chromium, or set $CHROME_PATH to its binary."
+    )
+
+
+def render_pdf_from_html(html: str) -> bytes:
+    """PDF export via a headless Chromium's built-in print-to-pdf, given
+    already-rendered HTML (e.g. the API's cached job.report_html) - no
+    second template, no separate PDF-specific rendering logic, and no
+    need to recompute the report just to get a PDF of it. The HTML is
+    written to a real temp file first because Chrome's headless
+    print-to-pdf needs a file:// (or http://) URL, not stdin.
+    """
+    chrome = _find_chrome_binary()
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        html_path = Path(tmp_dir) / "report.html"
+        pdf_path = Path(tmp_dir) / "report.pdf"
+        html_path.write_text(html)
+
+        result = subprocess.run(
+            [
+                chrome,
+                "--headless=new",
+                "--disable-gpu",
+                "--no-pdf-header-footer",
+                f"--print-to-pdf={pdf_path}",
+                f"file://{html_path}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if not pdf_path.exists():
+            raise RuntimeError(
+                f"PDF export failed (chrome exit {result.returncode}): {result.stderr}"
+            )
+        return pdf_path.read_bytes()
+
+
+def render_pdf(report: Report) -> bytes:
+    """Convenience wrapper: render_pdf_from_html(render_html(report))."""
+    return render_pdf_from_html(render_html(report))
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="python -m core.report")
     parser.add_argument("pcap", type=Path)
     parser.add_argument("--json", type=Path, help="write schema-validated JSON to this path")
     parser.add_argument("--html", type=Path, help="write an HTML report to this path")
+    parser.add_argument("--pdf", type=Path, help="write a PDF report to this path")
     args = parser.parse_args(argv)
 
     report = build_report(args.pcap)
 
-    if not args.json and not args.html:
+    if not args.json and not args.html and not args.pdf:
         print(report_to_json(report))
         return 0
 
@@ -351,6 +426,9 @@ def main(argv: list[str]) -> int:
     if args.html:
         args.html.write_text(render_html(report))
         print(f"Wrote {args.html}")
+    if args.pdf:
+        args.pdf.write_bytes(render_pdf(report))
+        print(f"Wrote {args.pdf}")
     return 0
 
 

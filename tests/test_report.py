@@ -7,6 +7,7 @@ from core.report import (
     REPORT_JSON_SCHEMA,
     build_report,
     render_html,
+    render_pdf,
     report_to_dict,
     report_to_json,
 )
@@ -161,3 +162,68 @@ def test_multiple_reports_all_validate(tmp_path):
         report_to_json(report)  # schema-validates internally
         html = render_html(report)
         assert "{{" not in html
+
+
+# --- PDF export (renders the SAME template as render_html(), via headless Chrome) ---
+
+
+def _pdf_text(pdf_bytes: bytes) -> str:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(BytesIO(pdf_bytes))
+    return "\n".join(page.extract_text() for page in reader.pages)
+
+
+def test_s17_pdf_is_valid_multi_page_and_has_expected_findings():
+    report = build_report(FIXTURES / "S17_smtp_587_plaintext_auth.pcap")
+    pdf_bytes = render_pdf(report)
+
+    assert pdf_bytes[:5] == b"%PDF-"  # real PDF, not garbage/empty
+
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(BytesIO(pdf_bytes))
+    # A one-session report with a findings table + STARTTLS timeline +
+    # appendix rule catalogue reliably spans multiple US-Letter pages at
+    # this template's font size; ballpark, not an exact pin.
+    assert 2 <= len(reader.pages) <= 10
+
+    text = _pdf_text(pdf_bytes)
+    assert "T-01" in text
+    assert "T-02" in text
+    assert "NO_TLS_OBSERVED" in text
+    assert "CRITICAL" in text
+    assert "0/100" in text or "0 /100" in text  # score renders as text, not an image
+
+
+def test_legacy_rc4_pdf_has_expected_findings():
+    report = build_report(FIXTURES / "S32_legacy_rc4.pcap")
+    pdf_bytes = render_pdf(report)
+    text = _pdf_text(pdf_bytes)
+    assert "WEAK_CIPHER_SUITE" in text
+    assert "NO_FORWARD_SECRECY" in text
+    assert "C-02" in text
+    assert "C-05" in text
+
+
+def test_pdf_placeholders_are_escaped_same_as_html():
+    # Same autoescape regression this project already guards for HTML
+    # (test_html_placeholders_are_escaped_not_swallowed) - PDF goes
+    # through the identical render_html() call, so <host>:<port> must
+    # survive as literal text in the extracted PDF content too.
+    report = build_report(FIXTURES / "S17_smtp_587_plaintext_auth.pcap")
+    pdf_bytes = render_pdf(report)
+    text = _pdf_text(pdf_bytes)
+    assert "<host>:<port>" in text or "<host>" in text
+
+
+def test_pdf_never_leaks_credentials():
+    report = build_report(FIXTURES / "S17_smtp_587_plaintext_auth.pcap")
+    pdf_bytes = render_pdf(report)
+    text = _pdf_text(pdf_bytes)
+    assert "labpass" not in text
+    assert "bGFicGFzcw" not in text

@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.orm import Session as DBSession
 
 from api.db import UPLOADS_DIR, Job, SessionLocal, get_db, init_db
@@ -32,7 +32,7 @@ from api.schemas import (
     SessionListResponse,
     SummaryResponse,
 )
-from core.report import build_report, render_html, report_to_json
+from core.report import build_report, render_html, render_pdf_from_html, report_to_json
 
 
 @asynccontextmanager
@@ -222,7 +222,9 @@ def get_findings(job_id: str, db: DBSession = Depends(get_db)) -> FindingsRespon
 
 
 @app.get("/api/v1/jobs/{job_id}/report")
-def get_report(job_id: str, format: str = Query("json", pattern="^(json|html)$"), db: DBSession = Depends(get_db)):
+def get_report(
+    job_id: str, format: str = Query("json", pattern="^(json|html|pdf)$"), db: DBSession = Depends(get_db)
+):
     job = _get_job_or_404(job_id, db)
     if job.status == "failed":
         raise HTTPException(status_code=422, detail=f"analysis failed: {job.error}")
@@ -231,4 +233,15 @@ def get_report(job_id: str, format: str = Query("json", pattern="^(json|html)$")
 
     if format == "html":
         return HTMLResponse(content=job.report_html)
+    if format == "pdf":
+        # Renders from the already-cached HTML (computed once, at job
+        # completion) rather than recomputing the report - core/report.py's
+        # render_pdf_from_html() is the same Chrome print-to-pdf path
+        # `python -m core.report --pdf` uses, no separate logic here.
+        pdf_bytes = render_pdf_from_html(job.report_html)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{job_id}.pdf"'},
+        )
     return JSONResponse(content=json.loads(job.report_json))
