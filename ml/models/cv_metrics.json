@@ -1,0 +1,51 @@
+{
+  "n_sessions": 30,
+  "n_scenarios": 21,
+  "n_splits": 5,
+  "macro_f1": 0.3855072463768116,
+  "labels_present": [
+    "Low",
+    "Medium",
+    "High",
+    "Critical"
+  ],
+  "confusion_matrix": [
+    [
+      7,
+      0,
+      4,
+      0
+    ],
+    [
+      1,
+      0,
+      1,
+      0
+    ],
+    [
+      4,
+      0,
+      1,
+      2
+    ],
+    [
+      0,
+      0,
+      2,
+      8
+    ]
+  ],
+  "per_class_recall": {
+    "Low": 0.6363636363636364,
+    "Medium": 0.0,
+    "High": 0.14285714285714285,
+    "Critical": 0.8
+  },
+  "per_class_support": {
+    "Low": 11,
+    "Medium": 2,
+    "High": 7,
+    "Critical": 10
+  },
+  "circularity_notice": "NOTE: labels and several features derive from the same known lab config; treat these metrics as an upper bound on a rule-consistency check, not independent validation."
+}

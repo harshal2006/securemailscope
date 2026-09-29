@@ -1,0 +1,198 @@
+[
+  {
+    "risk_class": "Low",
+    "pcap": "S01b_smtp_587_starttls_auth.pcap",
+    "scenario_id": "smtp_starttls_clean_tls13",
+    "predicted_class": "Low",
+    "top_features": [
+      {
+        "feature": "frame_span",
+        "shap_value": 0.12757739346699884
+      },
+      {
+        "feature": "cert_validity_period_days",
+        "shap_value": 0.10137885810636361
+      },
+      {
+        "feature": "tls_version_ordinal",
+        "shap_value": 0.07662419114062725
+      },
+      {
+        "feature": "cipher_suite_numeric",
+        "shap_value": 0.0446706595182758
+      },
+      {
+        "feature": "cert_observable",
+        "shap_value": 0.043728470161254855
+      },
+      {
+        "feature": "cert_is_expired",
+        "shap_value": 0.037235880198334584
+      },
+      {
+        "feature": "cert_is_selfsigned",
+        "shap_value": 0.03657659980706226
+      },
+      {
+        "feature": "cert_key_is_rsa_or_dsa",
+        "shap_value": 0.032389797336646174
+      },
+      {
+        "feature": "auth_before_tls",
+        "shap_value": 0.02288211304711125
+      },
+      {
+        "feature": "kex_is_ephemeral",
+        "shap_value": 0.021290822369661552
+      }
+    ],
+    "plot": "models/shap_explanations/low_S01b_smtp_587_starttls_auth.png"
+  },
+  {
+    "risk_class": "Medium",
+    "pcap": "S18_smtp_587_starttls_expired_cert.pcap",
+    "scenario_id": "smtp_cert_expired",
+    "predicted_class": "Medium",
+    "top_features": [
+      {
+        "feature": "cert_is_expired",
+        "shap_value": 0.21895373634602394
+      },
+      {
+        "feature": "frame_span",
+        "shap_value": 0.08716316514153143
+      },
+      {
+        "feature": "cert_validity_period_days",
+        "shap_value": 0.07745926784276594
+      },
+      {
+        "feature": "cert_is_selfsigned",
+        "shap_value": -0.05361754032222095
+      },
+      {
+        "feature": "cipher_suite_numeric",
+        "shap_value": 0.05325214401195973
+      },
+      {
+        "feature": "tls_version_ordinal",
+        "shap_value": 0.03594982368260724
+      },
+      {
+        "feature": "server_port",
+        "shap_value": 0.03260497142367008
+      },
+      {
+        "feature": "cert_key_size",
+        "shap_value": 0.028503096781622037
+      },
+      {
+        "feature": "tls_mode_starttls",
+        "shap_value": 0.0263428393451847
+      },
+      {
+        "feature": "starttls_success",
+        "shap_value": 0.02038329385711396
+      }
+    ],
+    "plot": "models/shap_explanations/medium_S18_smtp_587_starttls_expired_cert.png"
+  },
+  {
+    "risk_class": "High",
+    "pcap": "S22_smtp_587_sha1_signed_cert.pcap",
+    "scenario_id": "smtp_cert_weak_sig_sha1",
+    "predicted_class": "High",
+    "top_features": [
+      {
+        "feature": "frame_span",
+        "shap_value": 0.13287757291347183
+      },
+      {
+        "feature": "cert_sig_is_weak",
+        "shap_value": 0.13057130455578372
+      },
+      {
+        "feature": "cert_is_expired",
+        "shap_value": 0.0535210069115113
+      },
+      {
+        "feature": "cert_is_selfsigned",
+        "shap_value": 0.0514651840397439
+      },
+      {
+        "feature": "cert_validity_period_days",
+        "shap_value": 0.044142805114649256
+      },
+      {
+        "feature": "auth_before_tls",
+        "shap_value": 0.023176936277452008
+      },
+      {
+        "feature": "cert_hostname_mismatch",
+        "shap_value": -0.017555276106596986
+      },
+      {
+        "feature": "tls_version_ordinal",
+        "shap_value": 0.017335695577869927
+      },
+      {
+        "feature": "cert_key_size",
+        "shap_value": -0.013252539555184354
+      },
+      {
+        "feature": "tls_version_is_legacy",
+        "shap_value": -0.01151948235560384
+      }
+    ],
+    "plot": "models/shap_explanations/high_S22_smtp_587_sha1_signed_cert.png"
+  },
+  {
+    "risk_class": "Critical",
+    "pcap": "S17_smtp_587_plaintext_auth.pcap",
+    "scenario_id": "smtp_plaintext_auth_submission",
+    "predicted_class": "Critical",
+    "top_features": [
+      {
+        "feature": "auth_before_tls",
+        "shap_value": 0.13229566296599116
+      },
+      {
+        "feature": "cipher_suite_numeric",
+        "shap_value": 0.10851507736364961
+      },
+      {
+        "feature": "tls_version_ordinal",
+        "shap_value": 0.07877113698696356
+      },
+      {
+        "feature": "tls_mode_starttls",
+        "shap_value": 0.058389046844359326
+      },
+      {
+        "feature": "kex_is_unknown",
+        "shap_value": 0.04284251443001443
+      },
+      {
+        "feature": "tls_mode_plaintext_only",
+        "shap_value": 0.04152071730352982
+      },
+      {
+        "feature": "kex_is_ephemeral",
+        "shap_value": 0.038755972293414
+      },
+      {
+        "feature": "starttls_issued",
+        "shap_value": 0.033229126438660425
+      },
+      {
+        "feature": "starttls_success",
+        "shap_value": 0.03309944637894655
+      },
+      {
+        "feature": "capability_advertised_starttls",
+        "shap_value": 0.02707702140592902
+      }
+    ],
+    "plot": "models/shap_explanations/critical_S17_smtp_587_plaintext_auth.png"
+  }
+]
