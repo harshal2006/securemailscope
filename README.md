@@ -6,11 +6,17 @@ parses sessions, TLS handshakes, and X.509 certificates, applies rules, and
 produces a 0-100 posture score with prioritized findings.
 
 Built for **Smart India Hackathon 2026, Problem Statement 26159 (NTRO)**.
-This is an MVP: no Streamlit, no ML, no API, no dashboard.
+Started as an analyzer-only MVP; a report renderer (JSON/HTML/PDF), a
+REST API, a Streamlit dashboard, and an ML layer (risk classifier +
+per-session anomaly detection) have since been built on top of it - see
+below for each.
 
 See [CLAUDE.md](CLAUDE.md) for the hard rules this project is built under
 (passive-only, lab-only traffic, no real credentials, redaction
-requirements, TLS 1.3 certificate observability).
+requirements, TLS 1.3 certificate observability), and
+[docs/STATUS.md](docs/STATUS.md) for the full, honest, rule-by-rule and
+component-by-component status - what's real-pcap-verified vs
+synthetic-only vs not implemented, with nothing rounded up.
 
 ## Install
 
@@ -27,8 +33,15 @@ Then, from `securemailscope/`:
 ```
 python3 -m venv .venv
 source .venv/bin/activate
-pip install cryptography pyyaml pytest jinja2 jsonschema
+pip install cryptography pyyaml pytest jinja2 jsonschema pypdf
 ```
+
+That covers the core analyzer/report pipeline and its tests. The API,
+dashboard, and ML layer each need their own extra packages - see their
+sections below (`Running the API`, `Running the dashboard`, `Running the
+ML layer`) for the exact `pip install` lines. PDF export additionally
+needs Google Chrome or Chromium installed locally (see `Generating a
+report` below).
 
 (There is no `pip install -e .` packaging step yet - `pyproject.toml` only
 declares dependencies, not a build backend.)
@@ -189,6 +202,47 @@ file exactly. Also covered by `tests/test_dashboard.py` using
 Streamlit's own `AppTest` framework against a real running API (not
 mocked) - more reliable for automated/CI verification than a
 screenshot, which was done as a one-time manual check alongside it.
+
+## Running the ML layer
+
+`ml/` adds a risk classifier and a per-session anomaly detector on top of
+the rule engine - built with an explicit anti-circularity/anti-leakage
+discipline (labels come from the known lab config that produced each
+capture, never from the rule engine's own output; cross-validation
+splits are grouped by `scenario_id` via `GroupKFold`, never a random
+split, so no session from the same underlying config leaks between
+train and test).
+
+```
+pip install scikit-learn shap joblib pandas
+python -m ml.train      # trains ml/models/risk_classifier.joblib, prints
+                         # GroupKFold metrics + confusion matrix, writes
+                         # ml/models/cv_metrics.json
+python -m ml.anomaly    # trains + evaluates the per-session Isolation
+                         # Forest (fit on baseline/compliant sessions only)
+python -m ml.predict <pcap>   # runs the rule engine AND the classifier on
+                               # a real pcap, fuses them (ml/fusion.py),
+                               # and prints both
+python -m ml.explain    # SHAP feature-importance explanation for the
+                         # trained classifier
+```
+
+**Honest scope, not inflated:** both models are trained and evaluated
+entirely on synthetic-lab-generated captures (`lab/generate_ml_variants.py`,
+documented in `ml/DATASET.md`), not real-world traffic - metrics in
+`ml/models/cv_metrics.json` and `ml/models/model_card.md` are reported
+as-is, including weak per-class recall where it occurs, with no
+rounding up. Retraining on real captured traffic is called out as a
+prerequisite for any production use in `ml/models/model_card.md`.
+Certificate-drift and STARTTLS-stripping detection (plan IDs `X-09`/`T-04`)
+are inherently **cross-session/stateful** signals - they were never
+forced through the (necessarily per-session) Isolation Forest, since
+doing so would misrepresent what that detector can see. But they are
+also **not implemented anywhere in this codebase**: the plan implied
+they existed as rule-based detectors, and that claim was checked
+directly against `rules/*.yaml` and found false. This is called out
+explicitly in `docs/STATUS.md` and `ml/models/model_card.md` as a
+corrected plan premise, not left implicit.
 
 ## What the rules check
 
@@ -386,6 +440,17 @@ Certificate. Implementing this would mean new field extraction and new
 session_builder parsing logic, not just reading data we already have.
 Flagged to the user rather than built.
 
-**Not built:** report rendering (HTML/PDF), a web UI or dashboard, an
-API, and any ML-based scoring or anomaly detection. Out of scope for this
-MVP by design.
+**Not implemented:**
+- `C-03` (weak DH parameters, <=1024 bits) - checked feasibility first;
+  would need new ServerKeyExchange field extraction we don't currently
+  do, not just reading data already collected. Flagged rather than built.
+- Cross-session behavioural detectors implied by the plan under
+  `X-09`/`T-04` (certificate drift across time, STARTTLS-stripping via
+  active MITM inference) - see the ML section above; this was a
+  corrected false premise in the plan, not a deferred feature.
+- ML-based rule generation, and retraining the ML layer on real
+  (non-synthetic) traffic.
+
+For the full rule-by-rule and component-by-component breakdown -
+including which findings are real-pcap-verified vs synthetic-only, and
+the exact final test count - see [docs/STATUS.md](docs/STATUS.md).
